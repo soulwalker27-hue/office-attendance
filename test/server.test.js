@@ -221,7 +221,10 @@ test("serves only the whitelisted static files, with security headers", async ()
   assert.equal(page.headers.get("x-frame-options"), "DENY");
   assert.match(page.headers.get("permissions-policy"), /camera=\(\)/);
   assert.match(await page.text(), /BKR Attendance Register/);
-  for (const p of ["/core.js", "/app.js", "/style.css"]) assert.equal((await api(p)).status, 200, p);
+  for (const p of ["/core.js", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/icon-180.png", "/icon-192.png", "/icon-512.png"]) assert.equal((await api(p)).status, 200, p);
+  assert.match((await api("/manifest.webmanifest")).headers.get("content-type"), /manifest\+json/);
+  assert.equal((await api("/icon-512.png")).headers.get("content-type"), "image/png");
+  assert.equal(JSON.parse(await (await api("/manifest.webmanifest")).text()).display, "standalone");
   for (const p of ["/package.json", "/server.js", "/data/store.json", "/data/auth.json", "/../server.js", "/%2e%2e/server.js", "/test/core.test.js", "/__proto__", "/constructor"]) {
     assert.equal((await api(p)).status, 404, p);
   }

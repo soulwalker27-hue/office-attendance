@@ -6,6 +6,11 @@
   <title>BKR Attendance Register (2026-27)</title>
   <meta name="description" content="BKR attendance register for 2026-27: daily check-in and check-out, leave, holidays and a monthly register, visible to everyone.">
   <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#111111">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="BKR Register">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icon-180.png">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M8 17l5 5 11-12' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -69,6 +74,9 @@
           </button>
           <button class="nav-tab" role="tab" aria-selected="false" aria-controls="tab-register" data-tab="register" id="tab-btn-register" type="button" tabindex="-1">
             <span>Register</span>
+          </button>
+          <button class="nav-tab" role="tab" aria-selected="false" aria-controls="tab-reports" data-tab="reports" id="tab-btn-reports" type="button" tabindex="-1">
+            <span>Reports</span>
           </button>
           <button class="nav-tab" role="tab" aria-selected="false" aria-controls="tab-leave-tracker" data-tab="leave-tracker" id="tab-btn-leave-tracker" type="button" tabindex="-1">
             <span>Leave</span>
@@ -300,6 +308,7 @@
                 <option value="DAY_OFF">Day off</option>
               </select>
               <button id="btn-export-attendance" class="secondary-btn" type="button"><span>Export CSV</span></button>
+              <button id="btn-manage-people" class="primary-btn" type="button" hidden><span>Add or remove employees</span></button>
               
             </div>
           </div>
@@ -459,6 +468,88 @@
             <span><b class="rc rc-W">W</b> Weekly off</span>
           </div>
           <div class="register-scroll" id="register-scroll" tabindex="0" role="region" aria-label="Attendance register for the month"></div>
+        </div>
+      </section>
+
+      <!-- TAB: REPORTS -->
+      <section class="tab-panel" id="tab-reports" role="tabpanel" aria-labelledby="tab-btn-reports" hidden>
+        <div class="glass-card">
+          <div class="card-header">
+            <div>
+              <h2>Reports</h2>
+              <p class="section-subtext" id="report-subtext">Who worked, where, for how long, and who took leave.</p>
+            </div>
+          </div>
+          <div class="report-filters">
+            <div class="form-group">
+              <label for="report-range" class="form-label">Period</label>
+              <select id="report-range" class="form-control">
+                <option value="this-month">This month</option>
+                <option value="last-month">Last month</option>
+                <option value="last-7">Last 7 days</option>
+                <option value="last-30">Last 30 days</option>
+                <option value="register">Whole register (Nov to Mar)</option>
+                <option value="custom">Custom dates</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="report-from" class="form-label">From</label>
+              <input type="date" id="report-from" class="form-control">
+            </div>
+            <div class="form-group">
+              <label for="report-to" class="form-label">To</label>
+              <input type="date" id="report-to" class="form-control">
+            </div>
+            <button id="btn-export-report" class="secondary-btn" type="button"><span>Export summary CSV</span></button>
+          </div>
+          <p class="form-error" id="report-error" role="alert" hidden></p>
+
+          <h3 class="report-h">Attendance and hours</h3>
+          <div class="table-responsive">
+            <table class="data-table report-table">
+              <caption class="sr-only">Attendance, hours and leave for each person in the chosen period</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Employee</th><th scope="col">Office days</th><th scope="col">Remote days</th>
+                  <th scope="col">Hours worked</th><th scope="col">Office hours</th><th scope="col">Remote hours</th>
+                  <th scope="col">Average a day</th><th scope="col">Usual in and out</th>
+                  <th scope="col">Medical</th><th scope="col">Emergency</th><th scope="col">Holiday leave</th><th scope="col">Absent</th>
+                </tr>
+              </thead>
+              <tbody id="report-summary-tbody"></tbody>
+              <tfoot id="report-summary-tfoot"></tfoot>
+            </table>
+          </div>
+
+          <h3 class="report-h">Leave taken</h3>
+          <div class="table-responsive">
+            <table class="data-table">
+              <caption class="sr-only">Approved leave that falls in the chosen period</caption>
+              <thead><tr><th scope="col">Employee</th><th scope="col">Type</th><th scope="col">From</th><th scope="col">To</th><th scope="col">Working days in period</th></tr></thead>
+              <tbody id="report-leave-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="glass-card report-timesheet">
+          <div class="card-header">
+            <div>
+              <h2>Timesheet</h2>
+              <p class="section-subtext">Every day for one person: where they worked, check-in, check-out and hours.</p>
+            </div>
+            <div class="register-controls">
+              <label for="report-person" class="sr-only">Person</label>
+              <select id="report-person" class="filter-select"></select>
+              <button id="btn-export-timesheet" class="secondary-btn" type="button"><span>Export timesheet CSV</span></button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <caption class="sr-only">Daily timesheet for the chosen person</caption>
+              <thead><tr><th scope="col">Date</th><th scope="col">Day</th><th scope="col">Status</th><th scope="col">Where</th><th scope="col">Check-in</th><th scope="col">Check-out</th><th scope="col">Break</th><th scope="col">Hours</th></tr></thead>
+              <tbody id="report-timesheet-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 

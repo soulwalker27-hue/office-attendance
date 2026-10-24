@@ -469,3 +469,70 @@ test("abuse caps: punches per day, breaks per session, leaves per employee", () 
   assert.equal(r.code, "TOO_MANY"); // the 101st toggle would open break #51
 });
 
+
+test("reports: office vs remote days, hours, averages, leave and absences for a period", () => {
+  const s = C.seedState();
+  const T = Date.UTC(2026, 10, 2, 4, 0); // Mon 2 Nov 09:30 IST
+  const now = Date.UTC(2026, 10, 10, 5, 0); // Tue 10 Nov
+  act(s, { type: "checkin", empId: "EMP-102", mode: "Office" }, T);
+  act(s, { type: "break", empId: "EMP-102" }, T + 3 * HOUR);
+  act(s, { type: "break", empId: "EMP-102" }, T + 3.5 * HOUR);
+  act(s, { type: "checkout", empId: "EMP-102" }, T + 8.5 * HOUR);
+  act(s, { type: "checkin", empId: "EMP-102", mode: "Remote" }, T + DAY);
+  act(s, { type: "checkout", empId: "EMP-102" }, T + DAY + 6 * HOUR);
+  act(s, { type: "leave", empId: "EMP-103", leaveType: "Medical", start: "2026-11-04", end: "2026-11-05", reason: "Fever" }, T);
+  act(s, { type: "leave", empId: "EMP-103", leaveType: "Holiday", start: "2026-11-30", end: "2026-12-01", reason: "Trip" }, T);
+
+  const r = C.reportRange(s, "2026-11-01", "2026-11-30", now, TZ);
+  const p = r.rows.find(x => x.emp.id === "EMP-102");
+  assert.deepEqual([p.officeDays, p.remoteDays, p.presentDays], [1, 1, 2]);
+  assert.equal(p.officeMin, 8 * 60, "9:30 to 18:00 minus a 30 minute break");
+  assert.equal(p.remoteMin, 6 * 60);
+  assert.equal(p.totalMin, 14 * 60);
+  assert.equal(p.avgMin, 7 * 60);
+  assert.equal(C.formatMinuteOfDay(p.avgIn), "09:30 AM");
+  assert.equal(C.formatMinuteOfDay(p.avgOut), "04:45 PM");
+  assert.equal(p.workingDays, 7, "2-10 Nov; nothing after today");
+  assert.equal(p.absent, 4);
+  const q = r.rows.find(x => x.emp.id === "EMP-103");
+  assert.deepEqual([q.ML, q.EL, q.HL, q.leaveDays], [2, 0, 1, 3]);
+  assert.equal(r.leaves.length, 2);
+  assert.deepEqual(r.leaves.map(l => [l.type, l.daysInRange]), [["Medical", 2], ["Holiday", 1]], "a leave running past the period counts only the days inside it");
+  assert.equal(r.totals.totalMin, 14 * 60);
+
+  assert.equal(C.reportRange(s, "2026-11-30", "2026-11-01", now, TZ), null);
+  assert.equal(C.reportRange(s, "2020-01-01", "2026-11-01", now, TZ), null, "ranges over 400 days are refused");
+  assert.equal(C.reportRange(s, "garbage", "2026-11-01", now, TZ), null);
+});
+
+test("timesheet lists each day with status, times, break and hours (newest first)", () => {
+  const s = C.seedState();
+  const T = Date.UTC(2026, 10, 2, 4, 0);
+  act(s, { type: "checkin", empId: "EMP-102", mode: "Office" }, T);
+  act(s, { type: "checkout", empId: "EMP-102" }, T + 8 * HOUR);
+  act(s, { type: "checkin", empId: "EMP-102", mode: "Remote" }, T + DAY);   // never checked out
+  const sheet = C.timesheet(s, "EMP-102", "2026-11-01", "2026-11-04", T + 2 * DAY + 5 * HOUR, TZ);
+  assert.deepEqual(sheet.map(d => [d.date, d.code]), [["2026-11-04", ""], ["2026-11-03", "R"], ["2026-11-02", "P"], ["2026-11-01", "W"]], "today is not marked absent until it ends");
+  const mon = sheet.find(d => d.date === "2026-11-02");
+  assert.equal(mon.workedMin, 8 * 60);
+  assert.equal(C.formatTime(mon.checkIn, TZ), "09:30 AM");
+  assert.equal(C.formatTime(mon.checkOut, TZ), "05:30 PM");
+  const tue = sheet.find(d => d.date === "2026-11-03");
+  assert.equal(tue.mode, "Remote");
+  assert.equal(tue.missed || tue.open, true, "an open or forgotten check-out is flagged, not guessed");
+  assert.equal(C.timesheet(s, "NOPE", "2026-11-01", "2026-11-04", T, TZ), null);
+});
+
+test("nobody is marked absent for days before the register starts (1 Nov 2026)", () => {
+  const s = C.seedState();
+  const now = Date.UTC(2026, 10, 3, 5, 0); // Tue 3 Nov
+  const r = C.reportRange(s, "2026-10-01", "2026-11-03", now, TZ);
+  const p = r.rows[1];
+  assert.equal(p.absent, 1, "only Mon 2 Nov, the one tracked working day before today");
+  assert.equal(p.workingDays, 2, "2 and 3 Nov");
+  const sheet = C.timesheet(s, "EMP-102", "2026-10-25", "2026-11-03", now, TZ);
+  assert.deepEqual(sheet.map(d => d.date), ["2026-11-03", "2026-11-02", "2026-11-01"]);
+  act(s, { type: "checkin", empId: "EMP-102" }, Date.UTC(2026, 9, 28, 4, 0));
+  const withEarly = C.timesheet(s, "EMP-102", "2026-10-25", "2026-11-03", now, TZ);
+  assert.ok(withEarly.some(d => d.date === "2026-10-28" && d.code === "P"), "a real punch before the register still shows");
+});

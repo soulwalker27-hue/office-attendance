@@ -622,45 +622,157 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
   // Monthly register
   // --------------------------------------------------------------------------
   /**
-   * One month of the register. Cell codes:
+   * What one person's day looks like. Codes:
    *   P present (office)  R present (remote)  A absent  ML/EL/HL medical/emergency/holiday leave
    *   H public holiday    W weekly off        ""  not yet / not employed
    */
-  function registerMonth(state, month, now, tz) {
+  function cellFor(state, emp, date, today, hol) {
+    if (!isActive(emp, date)) return "";
+    const recs = state.attendance.filter(r => r.empId === emp.id && r.date === date); // a forgotten check-out still counts as present
+    if (recs.length) return recs.every(r => r.mode === "Remote") ? "R" : "P";
+    if (hol.has(date)) return "H";
+    const wd = weekday(date);
+    if (wd === 0 || wd === 6) return "W";
+    const leave = leaveOn(state, emp.id, date);
+    if (leave) return { Medical: "ML", Emergency: "EL", Holiday: "HL" }[leave.type];
+    // Absences are only recorded from the first month of the register, never for earlier dates.
+    return date < today && date >= `${REGISTER.months[0]}-01` ? "A" : "";
+  }
+
+  function monthDates(month) {
+    if (!/^\d{4}-\d{2}$/.test(month) || !parseDate(`${month}-01`)) return null;
     const first = `${month}-01`;
-    if (!/^\d{4}-\d{2}$/.test(month) || !parseDate(first)) return null;
     const last = isoOf(new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0)));
+    const days = [];
+    for (let d = first; d <= last; d = addDays(d, 1)) days.push(d);
+    return { first, last, days };
+  }
+
+  /** One month of the register: a row per person, a code per day, and totals. */
+  function registerMonth(state, month, now, tz) {
+    const m = monthDates(month);
+    if (!m) return null;
     const today = dateKey(now, tz);
     const hol = holidayMap(state);
-    const days = [];
-    for (let d = first; d <= last; d = addDays(d, 1)) {
-      days.push({ date: d, day: Number(d.slice(8)), dow: weekday(d), off: hol.has(d) ? "H" : (weekday(d) === 0 || weekday(d) === 6 ? "W" : null), holiday: hol.get(d) || null });
-    }
+    const days = m.days.map(d => ({
+      date: d, day: Number(d.slice(8)), dow: weekday(d), holiday: hol.get(d) || null,
+      off: hol.has(d) ? "H" : (weekday(d) === 0 || weekday(d) === 6 ? "W" : null)
+    }));
     const rows = state.employees
-      .filter(e => (!e.joinDate || e.joinDate <= last) && (!e.leftOn || e.leftOn >= first))
+      .filter(e => (!e.joinDate || e.joinDate <= m.last) && (!e.leftOn || e.leftOn >= m.first))
       .map(emp => {
         const totals = { P: 0, R: 0, A: 0, ML: 0, EL: 0, HL: 0 };
         const cells = days.map(day => {
-          if (!isActive(emp, day.date)) return "";
-          const recs = state.attendance.filter(r => r.empId === emp.id && r.date === day.date); // a forgotten check-out still counts as present
-          if (recs.length) {
-            const code = recs.every(r => r.mode === "Remote") ? "R" : "P";
-            totals[code]++;
-            return code;
-          }
-          if (day.off) return day.off;
-          const leave = leaveOn(state, emp.id, day.date);
-          if (leave) {
-            const code = { Medical: "ML", Emergency: "EL", Holiday: "HL" }[leave.type];
-            totals[code]++;
-            return code;
-          }
-          if (day.date < today) { totals.A++; return "A"; }
-          return "";
+          const code = cellFor(state, emp, day.date, today, hol);
+          if (totals[code] !== undefined) totals[code]++;
+          return code;
         });
         return { emp, cells, totals };
       });
-    return { month, first, last, days, rows };
+    return { month, first: m.first, last: m.last, days, rows };
+  }
+
+  // --------------------------------------------------------------------------
+  // Reports: who worked where and for how long, who took leave
+  // --------------------------------------------------------------------------
+  const MAX_REPORT_DAYS = 400;
+
+  function minuteOfDay(ms, tz) {
+    const p = zoneParts(ms, tz);
+    return Number(p.hour) * 60 + Number(p.minute);
+  }
+
+  function formatMinuteOfDay(min) {
+    const h = Math.floor(min / 60), m = Math.round(min % 60);
+    return `${String(h % 12 === 0 ? 12 : h % 12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+  }
+
+  function rangeDates(from, to) {
+    if (!parseDate(from) || !parseDate(to) || from > to) return null;
+    if (diffDays(from, to) + 1 > MAX_REPORT_DAYS) return null;
+    const days = [];
+    for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
+    return days;
+  }
+
+  /**
+   * Summary for a date range: per person office / remote days, hours, average hours,
+   * typical arrival and departure, leave by type and absences, plus the leave taken.
+   */
+  function reportRange(state, from, to, now, tz) {
+    const dates = rangeDates(from, to);
+    if (!dates) return null;
+    const today = dateKey(now, tz);
+    const hol = holidayMap(state);
+    const rows = state.employees
+      .filter(e => (!e.joinDate || e.joinDate <= to) && (!e.leftOn || e.leftOn >= from))
+      .map(emp => {
+        const r = { emp, workingDays: 0, officeDays: 0, remoteDays: 0, absent: 0, ML: 0, EL: 0, HL: 0, officeMin: 0, remoteMin: 0, totalMin: 0, missedCheckouts: 0 };
+        let inSum = 0, inN = 0, outSum = 0, outN = 0;
+        for (const date of dates) {
+          if (!isActive(emp, date)) continue;
+          if (date <= today && date >= `${REGISTER.months[0]}-01` && isWorkday(date, hol)) r.workingDays++;
+          const code = cellFor(state, emp, date, today, hol);
+          if (code === "P") r.officeDays++;
+          else if (code === "R") r.remoteDays++;
+          else if (code === "A") r.absent++;
+          else if (r[code] !== undefined) r[code]++;
+          if (code === "P" || code === "R") {
+            const recs = state.attendance.filter(x => x.empId === emp.id && x.date === date);
+            recs.forEach(rec => {
+              const min = workedMinutes(rec, now);
+              if (rec.mode === "Remote") r.remoteMin += min; else r.officeMin += min;
+              if (rec.missed) r.missedCheckouts++;
+            });
+            inSum += minuteOfDay(recs[0].checkIn, tz); inN++;
+            const last = recs[recs.length - 1];
+            if (last.checkOut != null && !last.missed) { outSum += minuteOfDay(last.checkOut, tz); outN++; }
+          }
+        }
+        r.totalMin = r.officeMin + r.remoteMin;
+        const present = r.officeDays + r.remoteDays;
+        r.presentDays = present;
+        r.avgMin = present ? Math.round(r.totalMin / present) : 0;
+        r.avgIn = inN ? Math.round(inSum / inN) : null;
+        r.avgOut = outN ? Math.round(outSum / outN) : null;
+        r.leaveDays = r.ML + r.EL + r.HL;
+        return r;
+      });
+    const names = new Map(state.employees.map(e => [e.id, e]));
+    const leaves = state.leaves
+      .filter(l => l.status === "Approved" && l.start <= to && l.end >= from)
+      .map(l => ({
+        id: l.id, emp: names.get(l.empId), type: l.type, start: l.start, end: l.end, days: l.days,
+        daysInRange: countWorkdays(l.start > from ? l.start : from, l.end < to ? l.end : to, hol)
+      }))
+      .sort((a, b) => a.start.localeCompare(b.start));
+    const sum = k => rows.reduce((t, r) => t + r[k], 0);
+    const totals = {
+      officeDays: sum("officeDays"), remoteDays: sum("remoteDays"), absent: sum("absent"),
+      ML: sum("ML"), EL: sum("EL"), HL: sum("HL"), officeMin: sum("officeMin"), remoteMin: sum("remoteMin"), totalMin: sum("totalMin")
+    };
+    return { from, to, days: dates.length, rows, leaves, totals };
+  }
+
+  /** Day-by-day timesheet for one person. */
+  function timesheet(state, empId, from, to, now, tz) {
+    const emp = getEmployee(state, empId);
+    const dates = rangeDates(from, to);
+    if (!emp || !dates) return null;
+    const today = dateKey(now, tz);
+    const hol = holidayMap(state);
+    const tracked = `${REGISTER.months[0]}-01`;
+    return dates.filter(d => d <= today && isActive(emp, d) && (d >= tracked || state.attendance.some(r => r.empId === empId && r.date === d))).map(date => {
+      const code = cellFor(state, emp, date, today, hol);
+      const agg = dayAggregate(state, empId, date, now);
+      return {
+        date, dow: weekday(date), code, note: hol.get(date) || null,
+        checkIn: agg ? agg.checkIn : null,
+        checkOut: agg && !agg.open && !agg.missed ? agg.checkOut : null,
+        workedMin: agg ? agg.workedMin : 0, breakMin: agg ? agg.breakMin : 0,
+        mode: agg ? agg.mode : null, missed: agg ? agg.missed : false, open: agg ? agg.open : false
+      };
+    }).reverse();
   }
 
   // --------------------------------------------------------------------------
@@ -703,7 +815,7 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
     formatDay, formatDuration, validTimeZone,
     cleanText, escapeHtml, csvField,
     emptyState, getEmployee, isActive, activeEmployees, adminsOn, openSession, breakMinutes, workedMinutes, workedMs,
-    leaveOn, usedDays, balances, statusFor, dayAggregate, history, nextHoliday, registerMonth,
+    leaveOn, usedDays, balances, statusFor, dayAggregate, history, nextHoliday, registerMonth, reportRange, timesheet, formatMinuteOfDay, MAX_REPORT_DAYS,
     validateLeave, applyAction, publicView, privateDetails, seedState, migrate
   };
 });

@@ -47,7 +47,12 @@ const STATIC_FILES = {
   "/index.html": ["index.html", "text/html; charset=utf-8"],
   "/style.css": ["style.css", "text/css; charset=utf-8"],
   "/app.js": ["app.js", "text/javascript; charset=utf-8"],
-  "/core.js": ["core.js", "text/javascript; charset=utf-8"]
+  "/core.js": ["core.js", "text/javascript; charset=utf-8"],
+  "/manifest.webmanifest": ["manifest.webmanifest", "application/manifest+json; charset=utf-8"],
+  "/icon.svg": ["icon.svg", "image/svg+xml"],
+  "/icon-180.png": ["icon-180.png", "image/png"],
+  "/icon-192.png": ["icon-192.png", "image/png"],
+  "/icon-512.png": ["icon-512.png", "image/png"]
 };
 
 const CSP = [

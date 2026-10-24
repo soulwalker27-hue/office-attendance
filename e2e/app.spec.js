@@ -189,6 +189,48 @@ test("register: months Nov to Mar only, CSV export, holidays marked", async () =
   expect(download.suggestedFilename()).toBe("BKR_Attendance_Register_2027-03.csv");
 });
 
+test("reports: hours, office vs remote, leave and the daily timesheet, with CSV export", async () => {
+  await page.goto(server.url);
+  await page.click("#tab-btn-reports");
+  await page.selectOption("#report-range", "register");
+  await expect(page.locator("#report-from")).toHaveValue("2026-11-01");
+  await expect(page.locator("#report-to")).toHaveValue("2027-03-31");
+  await page.selectOption("#report-range", "last-30");
+  const summary = page.locator("#report-summary-tbody tr", { hasText: "Bibhu P. Dash" });
+  await expect(summary).toBeVisible();
+  await expect(page.locator("#report-summary-tfoot")).toContainText("Everyone");
+  // Bibhu has a booked emergency leave in this window (from the leave test) and a punch today
+  await page.selectOption("#report-range", "custom");
+  await page.fill("#report-from", "2026-10-01");
+  await page.fill("#report-to", "2026-12-31");
+  await page.locator("#report-to").dispatchEvent("change");
+  await expect(page.locator("#report-leave-tbody")).toContainText("Bibhu P. Dash");
+  await expect(page.locator("#report-leave-tbody")).toContainText("Emergency");
+  await expect(summary).toContainText(/\d+h \d{2}m/);
+  await page.selectOption("#report-person", { label: "Bibhu P. Dash" });
+  await expect(page.locator("#report-timesheet-tbody")).toContainText("Office");
+  await expect(page.locator("#report-timesheet-tbody")).not.toContainText("undefined");
+  await page.fill("#report-from", "2026-12-31");
+  await page.fill("#report-to", "2026-12-01");
+  await page.locator("#report-to").dispatchEvent("change");
+  await expect(page.locator("#report-error")).toBeVisible();
+  await page.fill("#report-from", "2026-10-01");
+  await page.fill("#report-to", "2026-12-31");
+  await page.locator("#report-to").dispatchEvent("change");
+  const [csv] = await Promise.all([page.waitForEvent("download"), page.click("#btn-export-report")]);
+  expect(csv.suggestedFilename()).toBe("BKR_Report_2026-10-01_to_2026-12-31.csv");
+  const [sheet] = await Promise.all([page.waitForEvent("download"), page.click("#btn-export-timesheet")]);
+  expect(sheet.suggestedFilename()).toMatch(/^BKR_Timesheet_Bibhu_P_Dash_/);
+});
+
+test("admin shortcut on the team board leads to adding and removing employees", async () => {
+  await page.goto(server.url);
+  await page.click("#tab-btn-team-directory");
+  await page.click("#btn-manage-people");
+  await expect(page.locator("#tab-admin")).toBeVisible();
+  await expect(page.locator("#btn-add-employee")).toBeVisible();
+});
+
 test("everything is remembered after the server restarts", async () => {
   await server.restart();
   await page.goto(server.url);
@@ -254,7 +296,7 @@ test("worst-case data: long names, emails and roles do not break the layout", as
 test("every screen fits the viewport and has no console errors", async () => {
   const errors = noPageErrors();
   await page.goto(server.url);
-  for (const tab of ["my-desk", "team-directory", "register", "leave-tracker", "holiday-calendar", "admin"]) {
+  for (const tab of ["my-desk", "team-directory", "register", "reports", "leave-tracker", "holiday-calendar", "admin"]) {
     await page.click(`#tab-btn-${tab}`);
     await expect(page.locator(`#tab-${tab}`)).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

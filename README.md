@@ -28,6 +28,21 @@ first time (6+ characters), and punches in. Bibhu signs in first and then manage
 Opening `index.html` directly (or any static host) still works in **local demo mode**: data
 stays in that browser only, and a banner says so.
 
+## On phones
+
+The app is already phone-friendly. Open the server's address in the phone's browser and choose
+**Add to Home Screen** (Android Chrome: menu, Install app; iPhone Safari: Share, Add to Home Screen)
+to get an icon and a full-screen app, at no extra cost. People outside the office need the server to
+be reachable from the internet over HTTPS (a small cloud server). See `office-attendance-summary.md`
+for rough costs of hosting and of a Play Store / App Store app.
+
+## Reports
+
+The **Reports** tab shows, for this month, last month, the last 7 or 30 days, the whole register or any custom dates:
+office days and remote days, hours worked (office, remote, average a day, usual arrival and departure),
+medical, emergency and holiday leave, and absences for every person, plus the leave taken and a day-by-day
+timesheet for one person. Each can be exported as CSV (hours as decimals, ready for Excel).
+
 ## Rules the app enforces
 
 | Area | Rule |
@@ -42,8 +57,8 @@ stays in that browser only, and a banner says so.
 ## Tests
 
 ```bash
-npm test          # 56 unit + API tests (node:test): rules, timezones, privacy, auth, security headers
-npm run test:e2e  # 26 browser tests (Playwright, desktop + phone): sign-in, punches, leave, privacy,
+npm test          # 59 unit + API tests (node:test): rules, timezones, privacy, auth, security headers
+npm run test:e2e  # 30 browser tests (Playwright, desktop + phone): sign-in, punches, leave, privacy,
                   # restart persistence, server outage recovery, retry safety, worst-case data, layout
 ```
 

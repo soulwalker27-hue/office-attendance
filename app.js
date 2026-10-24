@@ -383,6 +383,12 @@
       $("holiday-form").addEventListener("submit", e => this.submitHoliday(e));
       $("register-month").addEventListener("change", e => { this.registerMonth = e.target.value; this.renderRegister(); });
       $("btn-export-register").addEventListener("click", () => this.exportRegister());
+      $("report-range").addEventListener("change", e => { this.reportKey = e.target.value; this.renderReports(); });
+      ["report-from", "report-to"].forEach(id => $(id).addEventListener("change", () => { this.reportKey = "custom"; this.renderReports(); }));
+      $("report-person").addEventListener("change", e => { this.reportPerson = e.target.value; this.renderReports(); });
+      $("btn-export-report").addEventListener("click", () => this.exportReport());
+      $("btn-export-timesheet").addEventListener("click", () => this.exportTimesheet());
+      $("btn-manage-people").addEventListener("click", () => this.showTab("admin"));
       $("employee-modal-close").addEventListener("click", () => this.closeModal($("employee-modal")));
       $("employee-cancel-btn").addEventListener("click", () => this.closeModal($("employee-modal")));
 
@@ -670,6 +676,7 @@
     renderAdmin() {
       const adminTab = $("tab-btn-admin");
       const admin = this.isAdmin();
+      $("btn-manage-people").hidden = !admin;
       adminTab.hidden = !admin;
       if (!admin) {
         if (adminTab.classList.contains("active")) this.showTab("my-desk");
@@ -742,6 +749,113 @@
         : `<div class="empty-cell">Nobody was employed in this month.</div>`;
     }
 
+    // ---- reports -------------------------------------------------------------
+    reportDates() {
+      const today = this.today();
+      const monthStart = today.slice(0, 7) + "-01";
+      const monthEnd = d => C.addDays(C.addDays(d.slice(0, 7) + "-01", 32).slice(0, 7) + "-01", -1);
+      switch (this.reportKey) {
+        case "last-month": { const prevEnd = C.addDays(monthStart, -1); return [prevEnd.slice(0, 7) + "-01", prevEnd]; }
+        case "last-7": return [C.addDays(today, -6), today];
+        case "last-30": return [C.addDays(today, -29), today];
+        case "register": { const ms = C.REGISTER.months; return [`${ms[0]}-01`, monthEnd(`${ms[ms.length - 1]}-01`)]; }
+        case "custom": return [$("report-from").value, $("report-to").value];
+        default: return [monthStart, monthEnd(monthStart)];
+      }
+    }
+
+    renderReports() {
+      this.reportKey = this.reportKey || "this-month";
+      $("report-range").value = this.reportKey;
+      const [from, to] = this.reportDates();
+      if (this.reportKey !== "custom") { $("report-from").value = from; $("report-to").value = to; }
+      const err = $("report-error");
+      const report = C.reportRange(this.state, from, to, this.now(), this.tz);
+      if (!report) {
+        err.textContent = `Choose a start date on or before the end date, no more than ${C.MAX_REPORT_DAYS} days apart.`;
+        err.hidden = false;
+        $("report-summary-tbody").innerHTML = ""; $("report-summary-tfoot").innerHTML = ""; $("report-leave-tbody").innerHTML = ""; $("report-timesheet-tbody").innerHTML = "";
+        return;
+      }
+      err.hidden = true;
+      this.report = report;
+      $("report-subtext").textContent = `${from} to ${to}. Days that have not happened yet are not counted.`;
+      const h = min => C.formatDuration(min);
+      $("report-summary-tbody").innerHTML = report.rows.length ? report.rows.map(r => `<tr>
+          <td><div class="emp-name">${esc(r.emp.name)}</div><div class="emp-dept">${esc(r.emp.role)}</div></td>
+          <td>${r.officeDays}</td><td>${r.remoteDays}</td>
+          <td class="mono-time"><b>${esc(h(r.totalMin))}</b></td><td class="mono-time">${esc(h(r.officeMin))}</td><td class="mono-time">${esc(h(r.remoteMin))}</td>
+          <td class="mono-time">${r.presentDays ? esc(h(r.avgMin)) : "-"}</td>
+          <td class="mono-time">${r.avgIn == null ? "-" : esc(C.formatMinuteOfDay(r.avgIn)) + (r.avgOut == null ? "" : " to " + esc(C.formatMinuteOfDay(r.avgOut)))}</td>
+          <td>${r.ML}</td><td>${r.EL}</td><td>${r.HL}</td>
+          <td>${r.absent ? `<span class="status-badge badge-emergency">${r.absent}</span>` : "0"}</td>
+        </tr>`).join("") : `<tr><td colspan="12" class="empty-cell">Nobody was employed in this period.</td></tr>`;
+      const t = report.totals;
+      $("report-summary-tfoot").innerHTML = report.rows.length ? `<tr>
+          <th scope="row">Everyone</th><td>${t.officeDays}</td><td>${t.remoteDays}</td>
+          <td class="mono-time"><b>${esc(h(t.totalMin))}</b></td><td class="mono-time">${esc(h(t.officeMin))}</td><td class="mono-time">${esc(h(t.remoteMin))}</td>
+          <td></td><td></td><td>${t.ML}</td><td>${t.EL}</td><td>${t.HL}</td><td>${t.absent}</td></tr>` : "";
+      this.labelTableCells($("tab-reports"));
+
+      const typeClass = { Medical: "badge-medical", Emergency: "badge-emergency", Holiday: "badge-holiday" };
+      $("report-leave-tbody").innerHTML = report.leaves.length ? report.leaves.map(l => `<tr>
+          <td>${esc(l.emp ? l.emp.name : "")}</td>
+          <td><span class="status-badge ${typeClass[l.type]}">${esc(l.type)}</span></td>
+          <td class="mono-time">${esc(l.start)}</td><td class="mono-time">${esc(l.end)}</td><td>${l.daysInRange}</td>
+        </tr>`).join("") : `<tr><td colspan="5" class="empty-cell">Nobody took leave in this period.</td></tr>`;
+
+      // timesheet person list
+      const sel = $("report-person");
+      const people = report.rows.map(r => r.emp);
+      const sig = people.map(p => p.id + p.name).join("|");
+      if (sig !== this.personSignature) {
+        this.personSignature = sig;
+        sel.innerHTML = people.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+      }
+      if (!people.some(p => p.id === this.reportPerson)) this.reportPerson = people.some(p => p.id === this.me) ? this.me : (people[0] ? people[0].id : "");
+      sel.value = this.reportPerson;
+      this.renderTimesheet(from, to);
+    }
+
+    renderTimesheet(from, to) {
+      const rows = this.reportPerson ? C.timesheet(this.state, this.reportPerson, from, to, this.now(), this.tz) : [];
+      this.sheet = rows || [];
+      const label = { P: "Present", R: "Present", A: "Absent", ML: "Medical leave", EL: "Emergency leave", HL: "Holiday leave", H: "Public holiday", W: "Weekly off", "": "" };
+      const badge = { P: "badge-in-office", R: "badge-remote", A: "badge-emergency", ML: "badge-medical", EL: "badge-medical", HL: "badge-holiday", H: "badge-checked-out", W: "badge-checked-out" };
+      $("report-timesheet-tbody").innerHTML = this.sheet.length ? this.sheet.map(d => `<tr>
+          <td class="mono-time">${esc(d.date)}</td>
+          <td>${esc("Sun Mon Tue Wed Thu Fri Sat".split(" ")[d.dow])}</td>
+          <td><span class="status-badge ${badge[d.code] || "badge-not-checked"}">${esc(d.code === "H" && d.note ? d.note : label[d.code] || "No record")}</span></td>
+          <td>${d.mode ? esc(d.mode === "Remote" ? "Remote" : "Office") : "-"}</td>
+          <td class="mono-time">${d.checkIn ? esc(C.formatTime(d.checkIn, this.tz)) : "-"}</td>
+          <td class="mono-time">${d.checkOut ? esc(C.formatTime(d.checkOut, this.tz)) : d.missed ? "Not recorded" : d.open ? "Working" : "-"}</td>
+          <td class="mono-time">${d.checkIn ? esc(C.formatDuration(d.breakMin)) : "-"}</td>
+          <td class="mono-time"><b>${d.checkIn ? esc(C.formatDuration(d.workedMin)) : "-"}</b></td>
+        </tr>`).join("") : `<tr><td colspan="8" class="empty-cell">No days to show for this person in the period.</td></tr>`;
+      this.labelTableCells($("tab-reports"));
+    }
+
+    exportReport() {
+      const r = this.report;
+      if (!r) return;
+      const head = ["Employee", "Designation", "Office days", "Remote days", "Hours worked", "Office hours", "Remote hours", "Average hours a day", "Usual check-in", "Usual check-out", "Medical leave days", "Emergency leave days", "Holiday leave days", "Absent days", "Working days in period"];
+      const dec = min => (min / 60).toFixed(2);
+      const lines = r.rows.map(x => [x.emp.name, x.emp.role, x.officeDays, x.remoteDays, dec(x.totalMin), dec(x.officeMin), dec(x.remoteMin), dec(x.avgMin),
+        x.avgIn == null ? "" : C.formatMinuteOfDay(x.avgIn), x.avgOut == null ? "" : C.formatMinuteOfDay(x.avgOut), x.ML, x.EL, x.HL, x.absent, x.workingDays].map(C.csvField).join(","));
+      this.download(`BKR_Report_${r.from}_to_${r.to}.csv`, [head.map(C.csvField).join(","), ...lines].join("\r\n"));
+      this.toast("Report exported.", "success");
+    }
+
+    exportTimesheet() {
+      const emp = C.getEmployee(this.state, this.reportPerson);
+      if (!emp || !this.report) return;
+      const head = ["Date", "Day", "Status", "Where", "Check-in", "Check-out", "Break (min)", "Hours worked"];
+      const lines = this.sheet.map(d => [d.date, "Sun Mon Tue Wed Thu Fri Sat".split(" ")[d.dow], d.code === "H" && d.note ? d.note : d.code, d.mode || "",
+        d.checkIn ? C.formatTime(d.checkIn, this.tz) : "", d.checkOut ? C.formatTime(d.checkOut, this.tz) : "", d.checkIn ? d.breakMin : "", d.checkIn ? (d.workedMin / 60).toFixed(2) : ""].map(C.csvField).join(","));
+      this.download(`BKR_Timesheet_${emp.name.replace(/[^A-Za-z0-9]+/g, "_")}_${this.report.from}_to_${this.report.to}.csv`, [head.map(C.csvField).join(","), ...lines].join("\r\n"));
+      this.toast("Timesheet exported.", "success");
+    }
+
     exportRegister() {
       const reg = C.registerMonth(this.state, this.registerMonth, this.now(), this.tz);
       if (!reg) return;
@@ -780,6 +894,7 @@
       this.renderLeaveTab();
       this.renderHolidays();
       this.renderRegister();
+      this.renderReports();
       this.renderAdmin();
       this.renderSync();
       this.labelTableCells();
@@ -789,7 +904,7 @@
     labelTableCells(root) {
       (root || document).querySelectorAll("table.data-table").forEach(table => {
         const heads = [...table.querySelectorAll("thead th")].map(th => th.textContent.trim());
-        table.querySelectorAll("tbody tr").forEach(tr => {
+        table.querySelectorAll("tbody tr, tfoot tr").forEach(tr => {
           [...tr.children].forEach((td, i) => { if (heads[i] && td.colSpan === 1) td.setAttribute("data-label", heads[i]); });
         });
       });
