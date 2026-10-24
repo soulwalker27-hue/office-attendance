@@ -16,9 +16,9 @@
   // Configuration
   // --------------------------------------------------------------------------
   const LEAVE_TYPES = {
-    Medical: { key: "medical", quota: 14, status: "MEDICAL_LEAVE", icon: "🩺", backdateDays: 7 },
-    Emergency: { key: "emergency", quota: 7, status: "EMERGENCY_LEAVE", icon: "🚨", backdateDays: 7 },
-    Holiday: { key: "holiday", quota: 12, status: "HOLIDAY", icon: "🏖️", backdateDays: 0 }
+    Medical: { key: "medical", quota: 14, status: "MEDICAL_LEAVE", backdateDays: 7 },
+    Emergency: { key: "emergency", quota: 7, status: "EMERGENCY_LEAVE", backdateDays: 7 },
+    Holiday: { key: "holiday", quota: 12, status: "HOLIDAY", backdateDays: 0 }
   };
 
   const DEPARTMENTS = ["Engineering", "Design", "Human Resources", "Marketing", "Product", "Sales & Ops"];

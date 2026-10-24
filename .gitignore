@@ -5,3 +5,6 @@ data/
 Thumbs.db
 Desktop.ini
 .vscode/
+test-results/
+playwright-report/
+e2e/screens/

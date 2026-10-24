@@ -9,7 +9,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M8 17l5 5 11-12' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -32,7 +32,6 @@
 
         <div class="header-controls">
           <div class="live-status-pill" id="global-date-pill">
-            <span class="clock-icon" aria-hidden="true">🕒</span>
             <span id="header-live-clock">--:--:--</span>
             <span class="divider" aria-hidden="true">|</span>
             <span id="header-live-date">Loading…</span>
@@ -46,16 +45,15 @@
           </div>
 
           <button id="theme-toggle-btn" class="theme-toggle-btn" type="button" title="Toggle light / dark theme" aria-label="Toggle theme">
-            <span id="theme-icon" aria-hidden="true">🌙</span>
             <span id="theme-label" class="theme-label">Dark Mode</span>
           </button>
 
-          <button id="sound-toggle-btn" class="icon-action-btn" type="button" title="Toggle sound" aria-label="Sound on" aria-pressed="true">
-            <span id="sound-icon" aria-hidden="true">🔊</span>
+          <button id="sound-toggle-btn" class="theme-toggle-btn" type="button" title="Toggle sound" aria-label="Sound on" aria-pressed="true">
+            <span id="sound-icon">Sound on</span>
           </button>
 
           <button id="reset-data-btn" class="secondary-btn btn-sm" type="button" hidden title="Reset the demo data stored in this browser">
-            <span>↺ Reset Demo</span>
+            <span>Reset demo</span>
           </button>
         </div>
       </div>
@@ -63,17 +61,17 @@
       <nav class="app-nav" aria-label="Sections">
         <div class="nav-container" role="tablist">
           <button class="nav-tab active" role="tab" aria-selected="true" aria-controls="tab-my-desk" data-tab="my-desk" id="tab-btn-my-desk" type="button">
-            <span class="tab-icon" aria-hidden="true">⚡</span><span>My Attendance & Punch</span>
+            <span>My attendance</span>
           </button>
           <button class="nav-tab" role="tab" aria-selected="false" aria-controls="tab-team-directory" data-tab="team-directory" id="tab-btn-team-directory" type="button" tabindex="-1">
-            <span class="tab-icon" aria-hidden="true">👥</span><span>Team Live Board</span>
+            <span>Team board</span>
             <span class="badge-count" id="active-in-office-count" aria-label="people present">0</span>
           </button>
           <button class="nav-tab" role="tab" aria-selected="false" aria-controls="tab-leave-tracker" data-tab="leave-tracker" id="tab-btn-leave-tracker" type="button" tabindex="-1">
-            <span class="tab-icon" aria-hidden="true">📋</span><span>Leave Management</span>
+            <span>Leave</span>
           </button>
           <button class="nav-tab" role="tab" aria-selected="false" aria-controls="tab-holiday-calendar" data-tab="holiday-calendar" id="tab-btn-holiday-calendar" type="button" tabindex="-1">
-            <span class="tab-icon" aria-hidden="true">🏖️</span><span>Holidays & Calendar</span>
+            <span>Holidays</span>
           </button>
         </div>
       </nav>
@@ -84,9 +82,8 @@
     <main class="main-content" id="main-content">
       <section class="summary-metrics-grid" aria-label="Today at a glance">
         <div class="metric-card card-gradient-emerald">
-          <div class="metric-icon-box" aria-hidden="true">🏢</div>
           <div class="metric-body">
-            <span class="metric-title">Team Present Today</span>
+            <span class="metric-title">Present today</span>
             <div class="metric-value-row">
               <span class="metric-val" id="metric-present-count">0</span>
               <span class="metric-sub" id="metric-present-total">/ 0 staff</span>
@@ -95,34 +92,31 @@
           </div>
         </div>
         <div class="metric-card card-gradient-amber">
-          <div class="metric-icon-box" aria-hidden="true">🩺</div>
           <div class="metric-body">
-            <span class="metric-title">Medical Leave Today</span>
+            <span class="metric-title">Medical leave</span>
             <div class="metric-value-row">
               <span class="metric-val" id="metric-medical-count">0</span>
-              <span class="metric-sub">colleagues</span>
+              <span class="metric-sub" id="metric-medical-sub">colleagues</span>
             </div>
             <span class="metric-footnote">Approved sick leave</span>
           </div>
         </div>
         <div class="metric-card card-gradient-rose">
-          <div class="metric-icon-box" aria-hidden="true">🚨</div>
           <div class="metric-body">
-            <span class="metric-title">Emergency Leave</span>
+            <span class="metric-title">Emergency leave</span>
             <div class="metric-value-row">
               <span class="metric-val" id="metric-emergency-count">0</span>
-              <span class="metric-sub">absences</span>
+              <span class="metric-sub" id="metric-emergency-sub">absences</span>
             </div>
             <span class="metric-footnote">Approved urgent leave</span>
           </div>
         </div>
         <div class="metric-card card-gradient-cyan">
-          <div class="metric-icon-box" aria-hidden="true">🌴</div>
           <div class="metric-body">
-            <span class="metric-title">Holidays & Vacations</span>
+            <span class="metric-title">On holiday</span>
             <div class="metric-value-row">
               <span class="metric-val" id="metric-holiday-count">0</span>
-              <span class="metric-sub">on break</span>
+              <span class="metric-sub" id="metric-holiday-sub">people</span>
             </div>
             <span class="metric-footnote" id="metric-next-holiday">&nbsp;</span>
           </div>
@@ -135,7 +129,7 @@
           <div class="glass-card punch-station-card">
             <div class="card-header">
               <div class="card-title-group">
-                <h2>Check-In & Check-Out</h2>
+                <h2>Check in and out</h2>
               </div>
               <div class="current-user-tag" id="current-user-tag">
                 <img id="current-user-avatar" src="" alt="" class="avatar-sm" width="38" height="38">
@@ -173,35 +167,32 @@
               <div class="mode-options">
                 <label class="mode-radio">
                   <input type="radio" name="workMode" value="Office" id="mode-office" checked>
-                  <span class="radio-custom">🏢 In the office</span>
+                  <span class="radio-custom">In the office</span>
                 </label>
                 <label class="mode-radio">
                   <input type="radio" name="workMode" value="Remote" id="mode-remote">
-                  <span class="radio-custom">🏡 Working from home</span>
+                  <span class="radio-custom">Working from home</span>
                 </label>
               </div>
             </fieldset>
 
             <div class="punch-action-buttons">
               <button id="btn-check-in" class="punch-btn btn-check-in" type="button">
-                <span class="btn-icon" aria-hidden="true">▶</span>
-                <span class="btn-label">Check In</span>
+                <span class="btn-label">Check in</span>
                 <span class="btn-subtext">Record entry time</span>
               </button>
               <button id="btn-check-out" class="punch-btn btn-check-out" type="button" disabled>
-                <span class="btn-icon" aria-hidden="true">⏹</span>
-                <span class="btn-label">Check Out</span>
+                <span class="btn-label">Check out</span>
                 <span class="btn-subtext">Complete work day</span>
               </button>
             </div>
 
             <div class="punch-aux-controls">
               <button id="btn-break-toggle" class="aux-btn" type="button" disabled>
-                <span id="break-btn-icon" aria-hidden="true">☕</span>
-                <span id="break-btn-text">Start Break</span>
+                <span id="break-btn-text">Start break</span>
               </button>
               <button id="btn-quick-apply-leave" class="aux-btn aux-btn-leave" type="button">
-                <span>📝 Request Leave</span>
+                <span>Request leave</span>
               </button>
             </div>
 
@@ -228,13 +219,13 @@
           <div class="desk-side-column">
             <div class="glass-card leave-balances-card">
               <div class="card-header-compact">
-                <h3>My Leave Balance <span id="balance-year" class="sub-pill"></span></h3>
-                <button class="link-btn" id="link-view-all-leaves" type="button">Full history →</button>
+                <h3>My leave balance <span id="balance-year" class="sub-pill"></span></h3>
+                <button class="link-btn" id="link-view-all-leaves" type="button">Full history</button>
               </div>
               <div class="balance-bars-list">
                 <div class="balance-item">
                   <div class="balance-info">
-                    <span class="balance-title">🏖️ Holiday</span>
+                    <span class="balance-title">Holiday</span>
                     <span class="balance-ratio" id="user-holiday-ratio">0 / 12 days taken</span>
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-cyan" id="user-holiday-progress" style="width: 0%;"></div></div>
@@ -242,7 +233,7 @@
                 </div>
                 <div class="balance-item">
                   <div class="balance-info">
-                    <span class="balance-title">🩺 Medical</span>
+                    <span class="balance-title">Medical</span>
                     <span class="balance-ratio" id="user-medical-ratio">0 / 14 days taken</span>
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-amber" id="user-medical-progress" style="width: 0%;"></div></div>
@@ -250,7 +241,7 @@
                 </div>
                 <div class="balance-item">
                   <div class="balance-info">
-                    <span class="balance-title">🚨 Emergency</span>
+                    <span class="balance-title">Emergency</span>
                     <span class="balance-ratio" id="user-emergency-ratio">0 / 7 days taken</span>
                   </div>
                   <div class="progress-track"><div class="progress-fill fill-rose" id="user-emergency-progress" style="width: 0%;"></div></div>
@@ -261,7 +252,7 @@
 
             <div class="glass-card history-card">
               <div class="card-header-compact">
-                <h3>My Recent Attendance</h3>
+                <h3>Recent attendance</h3>
                 <span class="sub-pill">Last 7 days</span>
               </div>
               <div class="table-responsive">
@@ -283,29 +274,28 @@
         <div class="glass-card team-directory-card">
           <div class="directory-toolbar">
             <div class="directory-title-block">
-              <h2>Team Live Attendance Board</h2>
+              <h2>Team board</h2>
               <p class="directory-description">
                 Everyone can see who is in, who is out and why (leave type only — reasons stay private). Select a colleague to see their timesheet and leave taken.
               </p>
             </div>
             <div class="directory-filters">
               <div class="search-input-wrapper">
-                <span class="search-icon" aria-hidden="true">🔍</span>
                 <input type="search" id="directory-search-input" placeholder="Search name, role or department…" class="search-field" aria-label="Search colleagues">
               </div>
               <select id="department-filter" class="filter-select" aria-label="Filter by department"></select>
               <select id="status-filter" class="filter-select" aria-label="Filter by status">
                 <option value="ALL">All statuses</option>
-                <option value="PRESENT">🟢 Present (office or remote)</option>
-                <option value="CHECKED_OUT">🔴 Checked out</option>
-                <option value="MEDICAL_LEAVE">🩺 Medical leave</option>
-                <option value="EMERGENCY_LEAVE">🚨 Emergency leave</option>
-                <option value="HOLIDAY">🏖️ On holiday</option>
-                <option value="NOT_CHECKED_IN">⚪ Not checked in</option>
-                <option value="DAY_OFF">🌙 Day off</option>
+                <option value="PRESENT">Present (office or remote)</option>
+                <option value="CHECKED_OUT">Checked out</option>
+                <option value="MEDICAL_LEAVE">Medical leave</option>
+                <option value="EMERGENCY_LEAVE">Emergency leave</option>
+                <option value="HOLIDAY">On holiday</option>
+                <option value="NOT_CHECKED_IN">Not checked in</option>
+                <option value="DAY_OFF">Day off</option>
               </select>
-              <button id="btn-export-attendance" class="secondary-btn" type="button"><span>📥 Export CSV</span></button>
-              <button id="btn-add-employee" class="secondary-btn" type="button"><span>➕ Add colleague</span></button>
+              <button id="btn-export-attendance" class="secondary-btn" type="button"><span>Export CSV</span></button>
+              <button id="btn-add-employee" class="secondary-btn" type="button"><span>Add colleague</span></button>
             </div>
           </div>
           <div class="table-responsive">
@@ -329,46 +319,46 @@
         <div class="leaves-layout">
           <div class="leave-categories-grid">
             <div class="leave-hero-card medical-hero">
-              <div class="hero-top"><div class="hero-icon" aria-hidden="true">🩺</div><span class="hero-badge badge-amber">Health & Wellness</span></div>
-              <h3 class="hero-title">Medical Leave</h3>
+              <div class="hero-top"><span class="hero-badge badge-amber">Health</span></div>
+              <h3 class="hero-title">Medical leave</h3>
               <p class="hero-desc">Illness, doctor visits and recovery. Can be back-dated up to 7 days.</p>
               <div class="hero-stats">
                 <div class="hero-stat-box"><span class="stat-number" id="card-medical-allocated">14</span><span class="stat-label">Yearly quota</span></div>
                 <div class="hero-stat-box"><span class="stat-number text-amber" id="card-medical-used">0</span><span class="stat-label">Days used</span></div>
                 <div class="hero-stat-box"><span class="stat-number text-emerald" id="card-medical-available">14</span><span class="stat-label">Available</span></div>
               </div>
-              <button class="primary-btn btn-apply-specific" data-type="Medical" type="button"><span>+ Apply Medical Leave</span></button>
+              <button class="primary-btn btn-apply-specific" data-type="Medical" type="button"><span>Request medical leave</span></button>
             </div>
 
             <div class="leave-hero-card emergency-hero">
-              <div class="hero-top"><div class="hero-icon" aria-hidden="true">🚨</div><span class="hero-badge badge-rose">Urgent Situations</span></div>
-              <h3 class="hero-title">Emergency Leave</h3>
+              <div class="hero-top"><span class="hero-badge badge-rose">Urgent</span></div>
+              <h3 class="hero-title">Emergency leave</h3>
               <p class="hero-desc">Unforeseen personal or family emergencies. Can be back-dated up to 7 days.</p>
               <div class="hero-stats">
                 <div class="hero-stat-box"><span class="stat-number" id="card-emergency-allocated">7</span><span class="stat-label">Yearly quota</span></div>
                 <div class="hero-stat-box"><span class="stat-number text-rose" id="card-emergency-used">0</span><span class="stat-label">Days used</span></div>
                 <div class="hero-stat-box"><span class="stat-number text-emerald" id="card-emergency-available">7</span><span class="stat-label">Available</span></div>
               </div>
-              <button class="primary-btn btn-apply-specific" data-type="Emergency" type="button"><span>+ Apply Emergency Leave</span></button>
+              <button class="primary-btn btn-apply-specific" data-type="Emergency" type="button"><span>Request emergency leave</span></button>
             </div>
 
             <div class="leave-hero-card holiday-hero">
-              <div class="hero-top"><div class="hero-icon" aria-hidden="true">🏖️</div><span class="hero-badge badge-cyan">Planned Time Off</span></div>
-              <h3 class="hero-title">Holiday / Vacation</h3>
+              <div class="hero-top"><span class="hero-badge badge-cyan">Planned</span></div>
+              <h3 class="hero-title">Holiday</h3>
               <p class="hero-desc">Planned paid time off. Must start today or later.</p>
               <div class="hero-stats">
                 <div class="hero-stat-box"><span class="stat-number" id="card-holiday-allocated">12</span><span class="stat-label">Yearly quota</span></div>
                 <div class="hero-stat-box"><span class="stat-number text-cyan" id="card-holiday-used">0</span><span class="stat-label">Days used</span></div>
                 <div class="hero-stat-box"><span class="stat-number text-emerald" id="card-holiday-available">12</span><span class="stat-label">Available</span></div>
               </div>
-              <button class="primary-btn btn-apply-specific" data-type="Holiday" type="button"><span>+ Apply Holiday Leave</span></button>
+              <button class="primary-btn btn-apply-specific" data-type="Holiday" type="button"><span>Request holiday</span></button>
             </div>
           </div>
 
           <div class="glass-card leave-history-card">
             <div class="card-header">
               <div>
-                <h2>Team Leave Balances</h2>
+                <h2>Leave balances</h2>
                 <p class="section-subtext" id="balances-subtext">Days taken this year, per person.</p>
               </div>
             </div>
@@ -376,7 +366,7 @@
               <table class="data-table">
                 <caption class="sr-only">Leave days taken versus yearly quota for every employee</caption>
                 <thead>
-                  <tr><th scope="col">Employee</th><th scope="col">🏖️ Holiday</th><th scope="col">🩺 Medical</th><th scope="col">🚨 Emergency</th></tr>
+                  <tr><th scope="col">Employee</th><th scope="col">Holiday</th><th scope="col">Medical</th><th scope="col">Emergency</th></tr>
                 </thead>
                 <tbody id="team-balances-tbody"></tbody>
               </table>
@@ -386,14 +376,14 @@
           <div class="glass-card leave-history-card">
             <div class="card-header">
               <div>
-                <h2>Company Leave Log</h2>
+                <h2>Leave log</h2>
                 <p class="section-subtext">All leave across the team. Working days exclude weekends and public holidays.</p>
               </div>
               <div class="leave-table-filter" role="group" aria-label="Filter leave log">
                 <button class="filter-chip active" data-leave-filter="ALL" type="button" aria-pressed="true">All</button>
-                <button class="filter-chip" data-leave-filter="Medical" type="button" aria-pressed="false">Medical 🩺</button>
-                <button class="filter-chip" data-leave-filter="Emergency" type="button" aria-pressed="false">Emergency 🚨</button>
-                <button class="filter-chip" data-leave-filter="Holiday" type="button" aria-pressed="false">Holidays 🏖️</button>
+                <button class="filter-chip" data-leave-filter="Medical" type="button" aria-pressed="false">Medical</button>
+                <button class="filter-chip" data-leave-filter="Emergency" type="button" aria-pressed="false">Emergency</button>
+                <button class="filter-chip" data-leave-filter="Holiday" type="button" aria-pressed="false">Holidays</button>
               </div>
             </div>
             <div class="table-responsive">
@@ -418,7 +408,7 @@
           <div class="glass-card public-holidays-card">
             <div class="card-header">
               <div>
-                <h2 id="public-holidays-title">Office Holidays</h2>
+                <h2 id="public-holidays-title">Office holidays</h2>
               </div>
               <span class="sub-pill" id="public-holidays-count"></span>
             </div>
@@ -429,9 +419,9 @@
           <div class="glass-card team-vacations-card">
             <div class="card-header">
               <div>
-                <h2>Upcoming Colleague Vacations</h2>
+                <h2>Who is away soon</h2>
               </div>
-              <button class="primary-btn btn-sm" id="btn-plan-holiday-btn" type="button">+ Plan My Holiday</button>
+              <button class="primary-btn btn-sm" id="btn-plan-holiday-btn" type="button">Plan a holiday</button>
             </div>
             <p class="section-subtext">See who is away soon so you can plan cover.</p>
             <div class="upcoming-feed" id="team-vacations-feed"></div>
@@ -456,9 +446,8 @@
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-title-group">
-          <span class="modal-icon-badge" id="modal-icon-badge" aria-hidden="true">📝</span>
           <div>
-            <h3 id="modal-title">Request Leave</h3>
+            <h3 id="modal-title">Request leave</h3>
             <p class="modal-sub">Booked instantly and deducted from your yearly balance</p>
           </div>
         </div>
@@ -472,9 +461,9 @@
         <div class="form-group">
           <label for="leave-type-select" class="form-label">Leave category <span class="required">*</span></label>
           <select id="leave-type-select" class="form-control" required>
-            <option value="Medical">🩺 Medical Leave</option>
-            <option value="Emergency">🚨 Emergency Leave</option>
-            <option value="Holiday">🏖️ Holiday / Vacation</option>
+            <option value="Medical">Medical Leave</option>
+            <option value="Emergency">Emergency leave</option>
+            <option value="Holiday">Holiday / Vacation</option>
           </select>
         </div>
         <div class="form-row-2">
@@ -536,9 +525,9 @@
         <div class="colleague-leave-summary">
           <h4>Leave taken this year</h4>
           <div class="colleague-leave-chips">
-            <div class="chip-item"><span class="chip-title">🏖️ Holiday</span><strong id="colleague-holidays-took">0 / 12 days</strong></div>
-            <div class="chip-item"><span class="chip-title">🩺 Medical</span><strong id="colleague-medical-took">0 / 14 days</strong></div>
-            <div class="chip-item"><span class="chip-title">🚨 Emergency</span><strong id="colleague-emergency-took">0 / 7 days</strong></div>
+            <div class="chip-item"><span class="chip-title">Holiday</span><strong id="colleague-holidays-took">0 / 12 days</strong></div>
+            <div class="chip-item"><span class="chip-title">Medical</span><strong id="colleague-medical-took">0 / 14 days</strong></div>
+            <div class="chip-item"><span class="chip-title">Emergency</span><strong id="colleague-emergency-took">0 / 7 days</strong></div>
           </div>
         </div>
         <div class="colleague-history-section">
@@ -567,9 +556,8 @@
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-title-group">
-          <span class="modal-icon-badge" aria-hidden="true">➕</span>
           <div>
-            <h3 id="employee-modal-title">Add colleague</h3>
+            <h3 id="employee-modal-title">Add a colleague</h3>
             <p class="modal-sub">New people start with 12 holiday, 14 medical and 7 emergency days</p>
           </div>
         </div>
@@ -614,7 +602,6 @@
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-title-group">
-          <span class="modal-icon-badge" aria-hidden="true">🔑</span>
           <div>
             <h3 id="auth-title">Sign in</h3>
             <p class="modal-sub" id="auth-help"></p>

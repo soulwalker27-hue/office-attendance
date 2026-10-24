@@ -7,7 +7,7 @@ A shared attendance board for an office. Everyone can see, live:
 - how many leave days each person has taken this year against their quota
 - the company holiday calendar and who is away soon
 
-Zero dependencies: plain HTML/CSS/JS in the browser and a ~150-line Node server (Node 18+).
+No runtime dependencies: plain HTML/CSS/JS in the browser and a small Node server (Node 18+). Playwright is a dev-only test tool.
 
 ## Run it for the whole office
 
@@ -39,8 +39,12 @@ stays in that browser only, and a banner says so.
 ## Tests
 
 ```bash
-npm test      # 48 tests: business rules, DST/timezone maths, privacy, HTTP API, security headers
+npm test          # 51 unit + API tests (node:test): rules, timezones, privacy, auth, security headers
+npm run test:e2e  # 20 browser tests (Playwright, desktop + phone): sign-in, punches, leave, privacy,
+                  # restart persistence, server outage recovery, retry safety, worst-case data, layout
 ```
+
+First time only: `npm install && npx playwright install chromium`.
 
 All rules live in `core.js` (pure functions, shared by browser, server and tests).
 
@@ -49,8 +53,9 @@ All rules live in `core.js` (pure functions, shared by browser, server and tests
 ```
 index.html  style.css  app.js   browser UI
 core.js                         business rules (browser + Node)
-server.js                       static files + JSON API + persistence
-test/                           node:test suites
+server.js                       static files, JSON API, sign-in, persistence
+test/                           node:test unit + API suites
+e2e/                            Playwright browser tests
 ```
 
 ## Security

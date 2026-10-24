@@ -212,6 +212,24 @@ test("reset-pin clears a forgotten PIN while the server keeps running", async ()
   assert.equal((await fresh.json()).created, true);
 });
 
+test("a retried request (same requestId) is applied once, not twice", async () => {
+  const token = await signIn("EMP-102");
+  await act(token, { type: "checkin" });
+  const requestId = "ab".repeat(16);
+  const first = await (await act(token, { type: "break", requestId })).json();
+  const retry = await (await act(token, { type: "break", requestId })).json();
+  assert.equal(first.onBreak, true);
+  assert.equal(retry.onBreak, true, "replayed answer, not a second toggle");
+  const rec = (await state()).state.attendance.filter(a => a.empId === "EMP-102" && a.checkOut == null).pop();
+  assert.equal(rec.breaks.length, 1);
+  assert.equal(rec.breaks[0].end, null);
+  const other = await signIn("EMP-103"); // already checked in by an earlier test
+  const before = (await state()).state.attendance.filter(a => a.empId === "EMP-103" && a.checkOut == null).pop().breaks.length;
+  assert.equal((await (await act(other, { type: "break", requestId })).json()).ok, true);
+  const after = (await state()).state.attendance.filter(a => a.empId === "EMP-103" && a.checkOut == null).pop().breaks.length;
+  assert.equal(after, before + 1, "the same id from another person is a new request");
+});
+
 // Keep last: it exhausts this address's request budget.
 test("rate limiting: a flood of requests from one address is throttled", async () => {
   let throttled = 0;

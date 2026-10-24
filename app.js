@@ -48,15 +48,29 @@
       return this.pack(await r.json());
     }
 
+    /** Retries network failures with backoff; the request id lets the server ignore duplicates. */
+    async send(url, init) {
+      const delays = [400, 1200, 2500];
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return await fetch(url, init);
+        } catch (err) {
+          if (attempt >= delays.length) throw err;
+          await new Promise(r => setTimeout(r, delays[attempt]));
+        }
+      }
+    }
+
     async act(action) {
-      const r = await fetch("/api/action", { method: "POST", headers: this.headers(), body: JSON.stringify(action) });
+      const requestId = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, "0")).join("");
+      const r = await this.send("/api/action", { method: "POST", headers: this.headers(), body: JSON.stringify(Object.assign({}, action, { requestId })) });
       const j = await r.json().catch(() => ({ ok: false, error: "Unexpected server response." }));
       if (r.status === 401) this.setToken("");
       return { result: j, view: j.view ? this.pack(j.view) : null };
     }
 
     async login(empId, pin) {
-      const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ empId, pin }) });
+      const r = await this.send("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ empId, pin }) });
       const j = await r.json().catch(() => ({ ok: false, error: "Unexpected server response." }));
       if (j.ok) this.setToken(j.token);
       return j;
@@ -132,7 +146,9 @@
   // Presentation helpers
   // ==========================================================================
   function avatarFor(emp) {
-    const initials = emp.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
+    const words = emp.name.trim().split(/\s+/).filter(Boolean);
+    const firstGrapheme = w => (window.Intl && Intl.Segmenter ? [...new Intl.Segmenter().segment(w)][0].segment : [...w][0]) || "";
+    const initials = (words.length > 1 ? [words[0], words[words.length - 1]] : words).map(w => firstGrapheme(w).toUpperCase()).join("") || "?";
     let h = 0;
     for (const ch of emp.id) h = (h * 31 + ch.charCodeAt(0)) % 360;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="hsl(${h},55%,38%)"/>` +
@@ -141,20 +157,20 @@
   }
 
   const STATUS_UI = {
-    CHECKED_IN: { cls: "badge-in-office", label: "🟢 In office" },
-    REMOTE: { cls: "badge-remote", label: "🏡 Remote" },
-    CHECKED_OUT: { cls: "badge-checked-out", label: "🔴 Checked out" },
-    MEDICAL_LEAVE: { cls: "badge-medical", label: "🩺 Medical leave" },
-    EMERGENCY_LEAVE: { cls: "badge-emergency", label: "🚨 Emergency leave" },
-    HOLIDAY: { cls: "badge-holiday", label: "🏖️ On holiday" },
-    DAY_OFF: { cls: "badge-not-checked", label: "🌙 Day off" },
-    NOT_CHECKED_IN: { cls: "badge-not-checked", label: "⚪ Not checked in" }
+    CHECKED_IN: { cls: "badge-in-office", label: "In office" },
+    REMOTE: { cls: "badge-remote", label: "Remote" },
+    CHECKED_OUT: { cls: "badge-checked-out", label: "Checked out" },
+    MEDICAL_LEAVE: { cls: "badge-medical", label: "Medical leave" },
+    EMERGENCY_LEAVE: { cls: "badge-emergency", label: "Emergency leave" },
+    HOLIDAY: { cls: "badge-holiday", label: "On holiday" },
+    DAY_OFF: { cls: "badge-not-checked", label: "Day off" },
+    NOT_CHECKED_IN: { cls: "badge-not-checked", label: "Not checked in" }
   };
 
   const TYPE_UI = {
-    Medical: { cls: "badge-medical", icon: "🩺" },
-    Emergency: { cls: "badge-emergency", icon: "🚨" },
-    Holiday: { cls: "badge-holiday", icon: "🏖️" }
+    Medical: { cls: "badge-medical" },
+    Emergency: { cls: "badge-emergency" },
+    Holiday: { cls: "badge-holiday" }
   };
 
   const isPresent = code => code === "CHECKED_IN" || code === "REMOTE";
@@ -241,7 +257,7 @@
       } catch (e) {
         this.offline = true;
         this.renderAll();
-        const result = { ok: false, error: "Could not reach the server. Check your connection and try again." };
+        const result = { ok: false, error: "Can't reach the server. Check that it is still running (npm start), then try again. Your entries are kept." };
         this.toast(result.error, "danger");
         return result;
       } finally {
@@ -261,12 +277,11 @@
       this.theme = theme;
       document.documentElement.setAttribute("data-theme", theme);
       if (remember) storage.set("pulse_theme", theme);
-      $("theme-icon").textContent = theme === "dark" ? "☀️" : "🌙";
-      $("theme-label").textContent = theme === "dark" ? "Light Mode" : "Dark Mode";
+      $("theme-label").textContent = theme === "dark" ? "Light mode" : "Dark mode";
     }
 
     renderSoundButton() {
-      $("sound-icon").textContent = this.sound ? "🔊" : "🔇";
+      $("sound-icon").textContent = this.sound ? "Sound on" : "Sound off";
       $("sound-toggle-btn").setAttribute("aria-pressed", String(this.sound));
       $("sound-toggle-btn").setAttribute("aria-label", this.sound ? "Sound on" : "Sound off");
     }
@@ -347,9 +362,10 @@
       $("modal-close-btn").addEventListener("click", () => this.closeModal($("leave-modal")));
       $("modal-cancel-btn").addEventListener("click", () => this.closeModal($("leave-modal")));
 
-      $("directory-search-input").addEventListener("input", () => this.renderTeamDirectory());
-      $("department-filter").addEventListener("change", () => this.renderTeamDirectory());
-      $("status-filter").addEventListener("change", () => this.renderTeamDirectory());
+      const redrawBoard = () => { this.renderTeamDirectory(); this.labelTableCells(); };
+      $("directory-search-input").addEventListener("input", redrawBoard);
+      $("department-filter").addEventListener("change", redrawBoard);
+      $("status-filter").addEventListener("change", redrawBoard);
       $("btn-export-attendance").addEventListener("click", () => this.exportCsv());
       $("btn-add-employee").addEventListener("click", () => this.openEmployeeModal());
       $("employee-form").addEventListener("submit", e => this.submitEmployee(e));
@@ -363,6 +379,7 @@
           c.setAttribute("aria-pressed", String(c === chip));
         });
         this.renderLeaveLog();
+        this.labelTableCells();
       }));
 
       // Delegated row actions (no inline handlers, so a strict CSP works).
@@ -442,7 +459,7 @@
         const emp = this.currentEmployee();
         if (emp) this.toast(r.created ? `Welcome, ${emp.name}. Your PIN is saved.` : `Signed in as ${emp.name}.`, "success");
       } catch (e2) {
-        fail("Could not reach the server.");
+        fail("Can't reach the server. Check that it is still running, then try again.");
       } finally {
         $("auth-submit").disabled = false;
         $("auth-form").reset();
@@ -609,12 +626,23 @@
       this.renderLeaveTab();
       this.renderHolidays();
       this.renderSync();
+      this.labelTableCells();
+    }
+
+    /** Copies column headings onto cells so tables can stack into cards on phones. */
+    labelTableCells(root) {
+      (root || document).querySelectorAll("table.data-table").forEach(table => {
+        const heads = [...table.querySelectorAll("thead th")].map(th => th.textContent.trim());
+        table.querySelectorAll("tbody tr").forEach(tr => {
+          [...tr.children].forEach((td, i) => { if (heads[i] && td.colSpan === 1) td.setAttribute("data-label", heads[i]); });
+        });
+      });
     }
 
     renderBanner() {
       const el = $("mode-banner");
       let text = "";
-      if (this.offline) text = "⚠️ Can't reach the server — showing the last data received. Reconnecting automatically…";
+      if (this.offline) text = "Can't reach the server — showing the last data received. Reconnecting automatically…";
       else if (this.store && this.store.mode === "local") text = "Local demo mode: data lives only in this browser. Run “npm start” to share one live board with the whole office.";
       el.hidden = !text;
       el.textContent = text;
@@ -653,6 +681,10 @@
       $("metric-present-count").textContent = counts.present;
       $("metric-present-total").textContent = `/ ${total} staff`;
       $("metric-present-percent").textContent = `${total ? Math.round(counts.present / total * 100) : 0}% in right now`;
+      const plural = (n, one, many) => (n === 1 ? one : many);
+      $("metric-medical-sub").textContent = plural(counts.MEDICAL_LEAVE, "colleague", "colleagues");
+      $("metric-emergency-sub").textContent = plural(counts.EMERGENCY_LEAVE, "absence", "absences");
+      $("metric-holiday-sub").textContent = plural(counts.HOLIDAY, "person", "people");
       $("metric-medical-count").textContent = counts.MEDICAL_LEAVE;
       $("metric-emergency-count").textContent = counts.EMERGENCY_LEAVE;
       $("metric-holiday-count").textContent = counts.HOLIDAY;
@@ -672,6 +704,7 @@
       gate.hidden = Boolean(emp);
       $("current-user-avatar").src = emp ? avatarFor(emp) : "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'/>";
       $("current-user-name").textContent = emp ? emp.name : "Nobody selected";
+      $("current-user-name").title = emp ? emp.name : "";
       $("current-user-role").textContent = emp ? `${emp.role} • ${emp.department}` : "Pick your name in the header";
       $("punch-timezone").textContent = `Office time (${this.tz})`;
 
@@ -696,16 +729,15 @@
       btnIn.disabled = present;
       btnOut.disabled = !present;
       btnBreak.disabled = !present;
-      $("break-btn-icon").textContent = status.onBreak ? "▶" : "☕";
-      $("break-btn-text").textContent = status.onBreak ? "End Break" : "Start Break";
+      $("break-btn-text").textContent = status.onBreak ? "End break" : "Start break";
 
       const labels = {
-        CHECKED_IN: status.onBreak ? "On a break ☕" : "Working — in the office",
-        REMOTE: status.onBreak ? "On a break ☕" : "Working — from home",
+        CHECKED_IN: status.onBreak ? "On a break" : "Working — in the office",
+        REMOTE: status.onBreak ? "On a break" : "Working — from home",
         CHECKED_OUT: "Checked out for the day",
-        MEDICAL_LEAVE: "On medical leave 🩺",
-        EMERGENCY_LEAVE: "On emergency leave 🚨",
-        HOLIDAY: "On holiday 🏖️",
+        MEDICAL_LEAVE: "On medical leave",
+        EMERGENCY_LEAVE: "On emergency leave",
+        HOLIDAY: "On holiday",
         DAY_OFF: `Day off (${status.note})`,
         NOT_CHECKED_IN: "Not checked in yet"
       };
@@ -752,7 +784,7 @@
           <td class="mono-time">${esc(C.formatTime(r.checkIn, this.tz))}</td>
           <td class="mono-time">${r.open || r.missed ? "--:--" : esc(C.formatTime(r.checkOut, this.tz))}</td>
           <td style="font-weight:700; color:var(--emerald-500);">${worked}</td>
-          <td><span class="status-badge ${r.mode === "Remote" ? "badge-remote" : "badge-in-office"}">${r.mode === "Remote" ? "🏡 Remote" : "🏢 Office"}</span></td>
+          <td><span class="status-badge ${r.mode === "Remote" ? "badge-remote" : "badge-in-office"}">${r.mode === "Remote" ? "Remote" : "Office"}</span></td>
         </tr>`;
       }).join("");
     }
@@ -790,6 +822,7 @@
         this.renderMetrics();
         this.renderTeamDirectory();
         if (emp) this.renderDesk();
+        this.labelTableCells();
       }
     }
 
@@ -819,7 +852,7 @@
       }
       tbody.innerHTML = rows.map(({ emp, status, agg }) => {
         const ui = STATUS_UI[status.code];
-        const badge = status.onBreak ? `<span class="status-badge badge-break">☕ On break</span>` : `<span class="status-badge ${ui.cls}">${ui.label}</span>`;
+        const badge = status.onBreak ? `<span class="status-badge badge-break">On break</span>` : `<span class="status-badge ${ui.cls}">${ui.label}</span>`;
         let leaveInfo = `<span class="text-muted">—</span>`;
         if (status.leave) leaveInfo = `<strong>${esc(status.leave.type)}</strong> <span class="text-muted">until ${esc(C.formatDay(status.leave.end))}</span>`;
         else if (status.code === "DAY_OFF") leaveInfo = `<span class="text-muted">${esc(status.note)}</span>`;
@@ -873,7 +906,7 @@
       const ui = STATUS_UI[status.code];
       const badge = $("colleague-status-badge");
       badge.className = `status-badge ${status.onBreak ? "badge-break" : ui.cls}`;
-      badge.textContent = status.onBreak ? "☕ On break" : ui.label;
+      badge.textContent = status.onBreak ? "On break" : ui.label;
       $("colleague-avatar").src = avatarFor(emp);
       $("colleague-modal-title").textContent = emp.name;
       $("colleague-role-dept").textContent = `${emp.role} • ${emp.department} (${emp.id})`;
@@ -907,6 +940,7 @@
         </div>`;
       }).join("") : `<div class="empty-cell">No leave on record.</div>`;
 
+      this.labelTableCells($("colleague-modal"));
       this.openModal($("colleague-modal"), $("colleague-modal-close-btn"));
     }
 
@@ -946,12 +980,12 @@
         const mine = this.view.mine[l.id];
         const details = mine
           ? `<div style="max-width:260px; font-size:0.85rem; color:var(--text-secondary);">${esc(mine.reason)}</div>${mine.contact ? `<div style="font-size:0.72rem; color:var(--text-muted);">Contact: ${esc(mine.contact)}</div>` : ""}`
-          : `<span class="text-muted">🔒 Private</span>`;
+          : `<span class="text-muted">Private</span>`;
         const cancellable = l.empId === this.me && l.status === "Approved" && l.start >= today;
-        const statusBadge = l.status === "Approved" ? `<span class="status-badge badge-in-office">✓ Approved</span>` : `<span class="status-badge badge-checked-out">✕ Cancelled</span>`;
+        const statusBadge = l.status === "Approved" ? `<span class="status-badge badge-in-office">Approved</span>` : `<span class="status-badge badge-checked-out">Cancelled</span>`;
         return `<tr>
           <td><div style="font-weight:700; color:var(--text-heading);">${esc(owner ? owner.name : l.empId)}</div><div style="font-size:0.75rem; color:var(--text-muted);">${esc(l.empId)}</div></td>
-          <td><span class="status-badge ${t.cls}">${t.icon} ${esc(l.type)}</span></td>
+          <td><span class="status-badge ${t.cls}">${esc(l.type)}</span></td>
           <td class="mono-time">${esc(l.start)}</td>
           <td class="mono-time">${esc(l.end)}</td>
           <td style="font-family:var(--font-mono); font-weight:700;">${esc(l.days)}</td>
@@ -967,7 +1001,7 @@
       const today = C.dateKey(this.now(), this.tz);
       const year = today.slice(0, 4);
       const list = C.PUBLIC_HOLIDAYS.filter(h => h.date.startsWith(year));
-      $("public-holidays-title").textContent = `Office Holidays (${year})`;
+      $("public-holidays-title").textContent = `Office holidays ${year}`;
       $("public-holidays-count").textContent = `${list.length} listed holidays`;
       $("public-holidays-list").innerHTML = list.map(h => {
         const d = C.parseDate(h.date);
@@ -1004,17 +1038,15 @@
     // ---- toast -------------------------------------------------------------
     toast(message, type) {
       const container = $("toast-container");
-      const icon = { success: "✅", danger: "⚠️", warning: "🔔" }[type] || "ℹ️";
       const el = document.createElement("div");
       el.className = `toast toast-${type || "info"}`;
-      el.innerHTML = `<span aria-hidden="true">${icon}</span><span>${esc(message)}</span>`;
+      el.innerHTML = `<span>${esc(message)}</span>`;
       container.appendChild(el);
+      el.setAttribute("role", type === "danger" ? "alert" : "status");
       setTimeout(() => {
-        el.style.opacity = "0";
-        el.style.transform = "translateX(20px)";
-        el.style.transition = "all 0.3s ease";
-        setTimeout(() => el.remove(), 300);
-      }, 4000);
+        el.classList.add("leaving");
+        setTimeout(() => el.remove(), 180);
+      }, 4500);
     }
   }
 

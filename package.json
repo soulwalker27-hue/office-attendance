@@ -11,6 +11,10 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test test/*.test.js",
-    "reset-pin": "node server.js --reset-pin"
+    "reset-pin": "node server.js --reset-pin",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
   }
 }

@@ -296,15 +296,29 @@ function logout(req, res) {
   return sendJson(res, 200, { ok: true });
 }
 
+// Replay cache: a client retrying after a dropped response gets the original answer
+// instead of the action running twice (e.g. a break toggling on and straight off again).
+const replies = new Map();
+const REPLY_TTL_MS = 10 * 60 * 1000, MAX_REPLIES = 2000;
+
 async function action(req, res) {
   const session = sessionFrom(req);
   if (!session) return sendJson(res, 401, { ok: false, code: "AUTH", error: "Please sign in again." });
   const body = await readJson(req, res);
   if (!body) return;
+  const replayKey = typeof body.requestId === "string" && /^[a-f0-9]{16,64}$/.test(body.requestId) ? `${session.empId}:${body.requestId}` : null;
+  const seen = replayKey && replies.get(replayKey);
+  if (seen && seen.exp > Date.now()) return sendJson(res, seen.status, Object.assign({}, seen.result, { view: view(session) }));
+
   body.empId = session.empId; // the session decides who acts, never the request body
   const result = core.applyAction(state, body, Date.now(), TZ);
   if (result.ok) persistState();
-  return sendJson(res, result.ok ? 200 : 422, Object.assign({}, result, { view: view(session) }));
+  const status = result.ok ? 200 : 422;
+  if (replayKey) {
+    if (replies.size >= MAX_REPLIES) replies.delete(replies.keys().next().value);
+    replies.set(replayKey, { status, result, exp: Date.now() + REPLY_TTL_MS });
+  }
+  return sendJson(res, status, Object.assign({}, result, { view: view(session) }));
 }
 
 // ---------------------------------------------------------------------------
