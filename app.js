@@ -703,6 +703,7 @@
       const gate = $("desk-gate");
       gate.hidden = Boolean(emp);
       $("current-user-avatar").src = emp ? avatarFor(emp) : "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'/>";
+      $("current-user-avatar").hidden = !emp;
       $("current-user-name").textContent = emp ? emp.name : "Nobody selected";
       $("current-user-name").title = emp ? emp.name : "";
       $("current-user-role").textContent = emp ? `${emp.role} • ${emp.department}` : "Pick your name in the header";
