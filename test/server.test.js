@@ -26,7 +26,7 @@ test("seeds a store on first run and serves state", async () => {
   assert.equal(r.status, 200);
   const j = await r.json();
   assert.equal(j.tz, "Asia/Kolkata");
-  assert.equal(j.state.employees.length, 8);
+  assert.equal(j.state.employees.length, 10);
   assert.ok(Math.abs(j.now - Date.now()) < 5000);
   assert.ok(fs.existsSync(process.env.DATA_FILE));
 });

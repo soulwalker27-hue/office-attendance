@@ -2139,3 +2139,6 @@ fieldset.work-mode-selector legend { padding: 0; }
   .punch-aux-controls { flex-wrap: wrap; }
   .punch-aux-controls > * { flex: 1 1 100%; }
 }
+
+/* Keep times and column headings on one line in tables */
+.mono-time, .data-table th { white-space: nowrap; }

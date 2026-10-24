@@ -14,7 +14,7 @@ Zero dependencies: plain HTML/CSS/JS in the browser and a ~150-line Node server 
 ```bash
 npm start                                   # http://127.0.0.1:3000, this machine only
 HOST=0.0.0.0 PORT=3000 npm start            # share on your office network
-OFFICE_TZ=Asia/Kolkata npm start            # timezone that defines "today" (default: server's zone)
+OFFICE_TZ=Asia/Kolkata npm start            # timezone that defines "today" (default: Asia/Kolkata)
 ```
 
 Everyone opens the server's address, picks their name in **You are**, and punches in. All
@@ -38,7 +38,7 @@ stays in that browser only, and a banner says so.
 ## Tests
 
 ```bash
-npm test      # 34 tests: business rules, DST/timezone maths, privacy, HTTP API, security headers
+npm test      # 36 tests: business rules, DST/timezone maths, privacy, HTTP API, security headers
 ```
 
 All rules live in `core.js` (pure functions, shared by browser, server and tests).
@@ -58,7 +58,7 @@ test/                           node:test suites
   the private-reason endpoint trusts the picked identity. Put it behind your VPN / office
   network, or add SSO before exposing it more widely. Leave is auto-approved (no manager flow).
 - Single server process with a JSON file — fine for an office, not for thousands of users.
-- Public-holiday list (US, 2026–2027) is in `core.js`; edit it for your country.
+- The public-holiday list (India, 2026–2027) in `core.js` only has dates that are fixed or widely agreed. Moon-dependent festivals (Eid, Muharram, state-specific days) must be confirmed by HR against the official notification and added there.
 
 ## License
 

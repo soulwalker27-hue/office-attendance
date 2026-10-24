@@ -564,7 +564,7 @@
       const next = C.nextHoliday(today);
       $("metric-next-holiday").textContent = !next ? "No upcoming company holiday"
         : next.date === today ? `Today: ${next.name}`
-          : `Next: ${next.name} in ${C.diffDays(today, next.date)} days`;
+          : `Next: ${next.name}, ${C.formatDay(next.date)} (in ${C.diffDays(today, next.date)} days)`;
     }
 
     renderDesk() {
@@ -870,7 +870,7 @@
       const year = today.slice(0, 4);
       const list = C.PUBLIC_HOLIDAYS.filter(h => h.date.startsWith(year));
       $("public-holidays-title").textContent = `Office Holidays (${year})`;
-      $("public-holidays-count").textContent = `${list.length} paid public holidays`;
+      $("public-holidays-count").textContent = `${list.length} listed holidays`;
       $("public-holidays-list").innerHTML = list.map(h => {
         const d = C.parseDate(h.date);
         const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });

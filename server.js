@@ -5,7 +5,7 @@
  * live attendance data. All business rules live in core.js; this file only
  * does HTTP, validation of transport-level concerns, and persistence.
  *
- *   PORT=3000 HOST=0.0.0.0 OFFICE_TZ=Asia/Kolkata DATA_FILE=data/store.json node server.js
+ *   PORT=3000 HOST=0.0.0.0 OFFICE_TZ=Asia/Kolkata (default) DATA_FILE=data/store.json node server.js
  */
 "use strict";
 
@@ -17,7 +17,7 @@ const core = require("./core.js");
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
 const DATA_FILE = path.resolve(process.env.DATA_FILE || path.join(__dirname, "data", "store.json"));
-const TZ = core.validTimeZone(process.env.OFFICE_TZ) ? process.env.OFFICE_TZ : Intl.DateTimeFormat().resolvedOptions().timeZone;
+const TZ = core.validTimeZone(process.env.OFFICE_TZ) ? process.env.OFFICE_TZ : "Asia/Kolkata";
 const MAX_BODY = 16 * 1024;
 
 const STATIC_FILES = {
