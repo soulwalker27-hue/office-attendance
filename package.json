@@ -1,0 +1,13 @@
+{
+  "name": "pulse-attend",
+  "version": "3.0.0",
+  "description": "Shared office attendance board: check-in/out, medical, emergency and holiday leave — visible to everyone.",
+  "license": "MIT",
+  "private": true,
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  }
+}

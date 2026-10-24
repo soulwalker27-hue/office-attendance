@@ -1,12 +1,7 @@
-# IDE and session metadata
-*.json
-!.vscode/launch.json
-
-# Operating System files
+node_modules/
+data/
+*.log
+.DS_Store
 Thumbs.db
 Desktop.ini
-.DS_Store
-
-# Temporary scratch and logs
-*.log
-scratch/
+.vscode/
