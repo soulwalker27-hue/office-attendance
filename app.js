@@ -1,5 +1,5 @@
 /**
- * PulseAttend — browser UI.
+ * BKR Attendance Register — browser UI.
  *
  * All business rules live in core.js. This file only renders state and sends
  * actions to a store. Two stores share one interface:
@@ -76,6 +76,11 @@
       return j;
     }
 
+    async resetPin(targetId) {
+      const r = await this.send("/api/reset-pin", { method: "POST", headers: this.headers(), body: JSON.stringify({ targetId }) });
+      return r.json().catch(() => ({ ok: false, error: "Unexpected server response." }));
+    }
+
     async logout() {
       try { await fetch("/api/logout", { method: "POST", headers: this.headers(), body: "{}" }); } catch (e) { /* offline: still forget the token */ }
       this.setToken("");
@@ -92,13 +97,13 @@
     read() {
       try {
         const d = JSON.parse(storage.get("pulse_v2"));
-        if (d && Array.isArray(d.employees) && Array.isArray(d.attendance) && Array.isArray(d.leaves)) return d;
+        if (d && Array.isArray(d.employees) && Array.isArray(d.attendance) && Array.isArray(d.leaves)) return C.migrate(d);
       } catch (e) { /* fall through to seed */ }
       return null;
     }
 
     seed() {
-      const d = C.seedState(Date.now(), this.tz);
+      const d = C.seedState();
       storage.set("pulse_v2", JSON.stringify(d));
       return d;
     }
@@ -224,6 +229,11 @@
     get state() { return this.view.state; }
     get tz() { return this.view.tz; }
     now() { return Date.now() + (this.view.skew || 0); }
+    today() { return C.dateKey(this.now(), this.tz); }
+    staff() { return C.activeEmployees(this.state, this.today()); }
+    isAdmin() { const e = this.currentEmployee(); return Boolean(e && e.isAdmin); }
+    holidays() { return C.holidayMap(this.state); }
+
     currentEmployee() { return this.me ? C.getEmployee(this.state, this.me) : null; }
 
     async refresh() {
@@ -240,8 +250,7 @@
 
     async perform(action) {
       if (this.busy) return { ok: false, error: "Please wait…" };
-      const needsMe = action.type !== "addEmployee";
-      if (needsMe && !this.me) {
+      if (!this.me) {
         this.toast("Select who you are in the header first.", "warning");
         return { ok: false, error: "No identity selected." };
       }
@@ -364,11 +373,16 @@
 
       const redrawBoard = () => { this.renderTeamDirectory(); this.labelTableCells(); };
       $("directory-search-input").addEventListener("input", redrawBoard);
-      $("department-filter").addEventListener("change", redrawBoard);
       $("status-filter").addEventListener("change", redrawBoard);
       $("btn-export-attendance").addEventListener("click", () => this.exportCsv());
       $("btn-add-employee").addEventListener("click", () => this.openEmployeeModal());
       $("employee-form").addEventListener("submit", e => this.submitEmployee(e));
+      $("leaver-form").addEventListener("submit", e => this.submitLeaver(e));
+      $("leaver-modal-close").addEventListener("click", () => this.closeModal($("leaver-modal")));
+      $("leaver-cancel-btn").addEventListener("click", () => this.closeModal($("leaver-modal")));
+      $("holiday-form").addEventListener("submit", e => this.submitHoliday(e));
+      $("register-month").addEventListener("change", e => { this.registerMonth = e.target.value; this.renderRegister(); });
+      $("btn-export-register").addEventListener("click", () => this.exportRegister());
       $("employee-modal-close").addEventListener("click", () => this.closeModal($("employee-modal")));
       $("employee-cancel-btn").addEventListener("click", () => this.closeModal($("employee-modal")));
 
@@ -386,6 +400,14 @@
       document.addEventListener("click", async e => {
         const inspect = e.target.closest("[data-inspect]");
         if (inspect) { this.inspectColleague(inspect.dataset.inspect); return; }
+        const adminBtn = e.target.closest("[data-admin]");
+        if (adminBtn) { this.adminPersonAction(adminBtn.dataset.admin, adminBtn.dataset.id); return; }
+        const rmHoliday = e.target.closest("[data-remove-holiday]");
+        if (rmHoliday) {
+          if (!confirm(`Remove the holiday on ${rmHoliday.dataset.removeHoliday}?`)) return;
+          this.report(await this.perform({ type: "removeHoliday", date: rmHoliday.dataset.removeHoliday }), "break");
+          return;
+        }
         const cancel = e.target.closest("[data-cancel-leave]");
         if (cancel) {
           if (!confirm("Cancel this leave request? The days return to your balance.")) return;
@@ -536,8 +558,8 @@
       $("modal-applicant-display").innerHTML =
         `<img src="${avatarFor(emp)}" alt="" class="avatar-sm" width="38" height="38">` +
         `<div><div style="font-weight:700; color:var(--text-heading);">${esc(emp.name)}</div>` +
-        `<div style="font-size:0.75rem; color:var(--text-muted);">${esc(emp.role)} • ${esc(emp.department)}</div></div>`;
-      const start = C.nextWorkday(today); // today if it is a working day, else the next one
+        `<div style="font-size:0.75rem; color:var(--text-muted);">${esc(emp.role)}</div></div>`;
+      const start = C.nextWorkday(today, this.holidays()); // today if it is a working day, else the next one
       $("leave-start-date").value = start;
       $("leave-end-date").value = start;
       $("leave-reason").value = "";
@@ -594,6 +616,7 @@
     // ---- employee modal ----------------------------------------------------
     openEmployeeModal() {
       $("employee-form").reset();
+      $("emp-join").value = this.today();
       $("employee-form-error").hidden = true;
       this.openModal($("employee-modal"), $("emp-name"));
     }
@@ -602,19 +625,150 @@
       e.preventDefault();
       const result = await this.perform({
         type: "addEmployee",
-        name: $("emp-name").value, role: $("emp-role").value, department: $("emp-dept").value,
-        email: $("emp-email").value, phone: $("emp-phone").value
+        name: $("emp-name").value, role: $("emp-role").value, joinDate: $("emp-join").value,
+        email: $("emp-email").value, phone: $("emp-phone").value, isAdmin: $("emp-admin").checked
       });
       if (result.ok) { this.closeModal($("employee-modal")); this.report(result, "in"); }
       else if (result.error) { $("employee-form-error").textContent = result.error; $("employee-form-error").hidden = false; }
     }
 
+    // ---- admin: people ------------------------------------------------------
+    openLeaverModal(empId) {
+      const emp = C.getEmployee(this.state, empId);
+      if (!emp) return;
+      this.leaverTarget = empId;
+      $("leaver-sub").textContent = `${emp.name} \u00b7 ${emp.role}`;
+      $("leaver-date").value = this.today();
+      $("leaver-error").hidden = true;
+      this.openModal($("leaver-modal"), $("leaver-date"));
+    }
+
+    async submitLeaver(e) {
+      e.preventDefault();
+      const result = await this.perform({ type: "removeEmployee", targetId: this.leaverTarget, lastDay: $("leaver-date").value });
+      if (result.ok) { this.closeModal($("leaver-modal")); this.report(result, "out"); }
+      else if (result.error) { $("leaver-error").textContent = result.error; $("leaver-error").hidden = false; }
+    }
+
+    async adminPersonAction(kind, empId) {
+      if (kind === "leave") return this.openLeaverModal(empId);
+      if (kind === "reset-pin") {
+        const emp = C.getEmployee(this.state, empId);
+        if (!emp || !confirm(`Clear ${emp.name}'s PIN? They will set a new one the next time they sign in.`)) return;
+        if (this.store.mode !== "shared") { this.toast("PINs only exist when the shared server is running.", "warning"); return; }
+        const r = await this.store.resetPin(empId);
+        if (r.view) this.view = this.store.pack(r.view);
+        this.report(r, "break");
+        this.renderAll();
+        return;
+      }
+      const action = kind === "reinstate" ? { type: "reinstateEmployee", targetId: empId }
+        : { type: "setAdmin", targetId: empId, isAdmin: kind === "make-admin" };
+      this.report(await this.perform(action), "break");
+    }
+
+    renderAdmin() {
+      const adminTab = $("tab-btn-admin");
+      const admin = this.isAdmin();
+      adminTab.hidden = !admin;
+      if (!admin) {
+        if (adminTab.classList.contains("active")) this.showTab("my-desk");
+        return;
+      }
+      const today = this.today();
+      const claimed = new Set(this.view.claimed || []);
+      const rows = [...this.state.employees].sort((x, y) => Number(C.isActive(y, today)) - Number(C.isActive(x, today)));
+      $("admin-people-tbody").innerHTML = rows.map(e => {
+        const active = C.isActive(e, today);
+        const upcoming = e.joinDate && e.joinDate > today;
+        const gone = e.leftOn && e.leftOn < today;
+        const status = gone ? `<span class="status-badge badge-checked-out">Left ${esc(e.leftOn)}</span>`
+          : upcoming ? `<span class="status-badge badge-remote">Joins ${esc(e.joinDate)}</span>`
+            : e.leftOn ? `<span class="status-badge badge-medical">Leaving ${esc(e.leftOn)}</span>`
+              : `<span class="status-badge badge-in-office">Active</span>`;
+        const btn = (kind, label) => `<button type="button" class="view-profile-btn" data-admin="${kind}" data-id="${esc(e.id)}">${label}</button>`;
+        const actions = [
+          e.leftOn ? btn("reinstate", "Reinstate") : btn("leave", "Mark as left"),
+          !gone && !e.leftOn ? (e.isAdmin ? btn("remove-admin", "Remove admin") : btn("make-admin", "Make admin")) : "",
+          active && claimed.has(e.id) && this.store.mode === "shared" ? btn("reset-pin", "Reset PIN") : ""
+        ].join(" ");
+        return `<tr>
+          <td><div class="emp-name">${esc(e.name)}${e.isAdmin ? ` <span class="you-tag">admin</span>` : ""}${e.id === this.me ? ` <span class="you-tag">(you)</span>` : ""}</div><div class="emp-dept">${esc(e.id)}</div></td>
+          <td>${esc(e.role)}</td>
+          <td class="mono-time">${esc(e.joinDate || "")}</td>
+          <td>${status}</td>
+          <td class="admin-actions">${actions}</td>
+        </tr>`;
+      }).join("");
+
+      const hol = [...this.state.holidays].sort((x, y) => x.date.localeCompare(y.date));
+      $("admin-holidays-tbody").innerHTML = hol.length ? hol.map(h => `<tr>
+          <td class="mono-time">${esc(h.date)}</td>
+          <td>${esc(h.name)}</td>
+          <td>${esc(C.parseDate(h.date).toLocaleString("en-US", { weekday: "long", timeZone: "UTC" }))}</td>
+          <td class="admin-actions"><button type="button" class="view-profile-btn" data-remove-holiday="${esc(h.date)}">Remove</button></td>
+        </tr>`).join("") : `<tr><td colspan="4" class="empty-cell">No holidays yet. Add the first one above.</td></tr>`;
+    }
+
+    async submitHoliday(e) {
+      e.preventDefault();
+      const err = $("holiday-form-error");
+      const result = await this.perform({ type: "addHoliday", date: $("holiday-date").value, name: $("holiday-name").value });
+      if (result.ok) { err.hidden = true; $("holiday-form").reset(); this.report(result, "in"); }
+      else if (result.error) { err.textContent = result.error; err.hidden = false; }
+    }
+
+    // ---- register ------------------------------------------------------------
+    renderRegister() {
+      const sel = $("register-month");
+      if (!this.registerMonth) {
+        const month = this.today().slice(0, 7);
+        this.registerMonth = C.REGISTER.months.includes(month) ? month : C.REGISTER.months[0];
+      }
+      sel.value = this.registerMonth;
+      const reg = C.registerMonth(this.state, this.registerMonth, this.now(), this.tz);
+      if (!reg) return;
+      $("register-subtext").textContent = `${this.monthLabel(this.registerMonth)}. Holidays and weekly offs are marked for everyone.`;
+      const head = reg.days.map(d => `<th class="rg-day ${d.off ? "rg-off" : ""}" scope="col" title="${esc(d.holiday || C.formatDay(d.date))}"><span>${d.day}</span><small>${"SMTWTFS"[d.dow]}</small></th>`).join("");
+      const body = reg.rows.map(({ emp, cells, totals }) => `<tr>
+          <th scope="row" class="rg-name"><span class="rg-n">${esc(emp.name)}</span><small>${esc(emp.role)}</small></th>
+          ${cells.map((c, i) => `<td class="rg-cell${c ? " rc rc-" + c : ""}${reg.days[i].off && !c ? "" : ""}" title="${esc(reg.days[i].date)}">${esc(c)}</td>`).join("")}
+          <td class="rg-total"><b>${totals.P + totals.R}</b></td>
+          <td class="rg-total">${totals.ML + totals.EL + totals.HL}</td>
+          <td class="rg-total">${totals.A}</td>
+        </tr>`).join("");
+      $("register-scroll").innerHTML = reg.rows.length
+        ? `<table class="register-table"><thead><tr><th class="rg-name" scope="col">Employee</th>${head}<th class="rg-total" scope="col" title="Days present">Pres.</th><th class="rg-total" scope="col" title="Days on leave">Leave</th><th class="rg-total" scope="col" title="Days absent">Abs.</th></tr></thead><tbody>${body}</tbody></table>`
+        : `<div class="empty-cell">Nobody was employed in this month.</div>`;
+    }
+
+    exportRegister() {
+      const reg = C.registerMonth(this.state, this.registerMonth, this.now(), this.tz);
+      if (!reg) return;
+      const header = ["Employee", "Designation", ...reg.days.map(d => d.day), "Present", "Leave", "Absent"];
+      const lines = reg.rows.map(({ emp, cells, totals }) =>
+        [emp.name, emp.role, ...cells, totals.P + totals.R, totals.ML + totals.EL + totals.HL, totals.A].map(C.csvField).join(","));
+      this.download(`BKR_Attendance_Register_${this.registerMonth}.csv`, [header.map(C.csvField).join(","), ...lines].join("\r\n"));
+      this.toast(`Exported ${this.monthLabel(this.registerMonth)}.`, "success");
+    }
+
+    download(name, text) {
+      const blob = new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url; link.download = name;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
     // ---- rendering ---------------------------------------------------------
     populateStaticSelects() {
-      const depts = C.DEPARTMENTS;
-      $("department-filter").innerHTML = `<option value="ALL">All departments</option>` +
-        depts.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join("");
-      $("emp-dept").innerHTML = depts.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join("");
+      const months = C.REGISTER.months;
+      $("register-month").innerHTML = months.map(m => `<option value="${m}">${esc(this.monthLabel(m))}</option>`).join("");
+    }
+
+    monthLabel(m) {
+      return new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5)) - 1, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
     }
 
     renderAll() {
@@ -625,6 +779,8 @@
       this.renderTeamDirectory();
       this.renderLeaveTab();
       this.renderHolidays();
+      this.renderRegister();
+      this.renderAdmin();
       this.renderSync();
       this.labelTableCells();
     }
@@ -657,11 +813,12 @@
 
     renderIdentity() {
       const sel = $("employee-switcher-select");
-      const sig = this.state.employees.map(e => e.id + e.name).join("|") + "#" + this.me;
+      const staff = this.staff();
+      const sig = staff.map(e => e.id + e.name).join("|") + "#" + this.me;
       if (sig !== this.employeeSignature) {
         this.employeeSignature = sig;
         sel.innerHTML = `<option value="">${this.me ? "— Sign out —" : "— Select yourself —"}</option>` +
-          this.state.employees.map(e => `<option value="${esc(e.id)}"${e.id === this.me ? " selected" : ""}>${esc(e.name)} (${esc(e.department)})</option>`).join("");
+          staff.map(e => `<option value="${esc(e.id)}"${e.id === this.me ? " selected" : ""}>${esc(e.name)} (${esc(e.role)})</option>`).join("");
       }
       sel.value = this.me;
     }
@@ -672,12 +829,13 @@
 
     renderMetrics() {
       const counts = { present: 0, MEDICAL_LEAVE: 0, EMERGENCY_LEAVE: 0, HOLIDAY: 0 };
-      this.state.employees.forEach(emp => {
+      const staff = this.staff();
+      staff.forEach(emp => {
         const code = this.statusOf(emp).code;
         if (isPresent(code)) counts.present++;
         else if (counts[code] !== undefined) counts[code]++;
       });
-      const total = this.state.employees.length;
+      const total = staff.length;
       $("metric-present-count").textContent = counts.present;
       $("metric-present-total").textContent = `/ ${total} staff`;
       $("metric-present-percent").textContent = `${total ? Math.round(counts.present / total * 100) : 0}% in right now`;
@@ -691,7 +849,7 @@
       $("active-in-office-count").textContent = counts.present;
 
       const today = C.dateKey(this.now(), this.tz);
-      const next = C.nextHoliday(today);
+      const next = C.nextHoliday(this.state, today);
       $("metric-next-holiday").textContent = !next ? "No upcoming company holiday"
         : next.date === today ? `Today: ${next.name}`
           : `Next: ${next.name}, ${C.formatDay(next.date)} (in ${C.diffDays(today, next.date)} days)`;
@@ -706,7 +864,7 @@
       $("current-user-avatar").hidden = !emp;
       $("current-user-name").textContent = emp ? emp.name : "Nobody selected";
       $("current-user-name").title = emp ? emp.name : "";
-      $("current-user-role").textContent = emp ? `${emp.role} • ${emp.department}` : "Pick your name in the header";
+      $("current-user-role").textContent = emp ? emp.role : "Pick your name in the header";
       $("punch-timezone").textContent = `Office time (${this.tz})`;
 
       const dot = $("punch-status-dot");
@@ -830,12 +988,10 @@
     // ---- team board --------------------------------------------------------
     boardRows() {
       const q = $("directory-search-input").value.toLowerCase().trim();
-      const dept = $("department-filter").value;
       const wanted = $("status-filter").value;
       const now = this.now();
-      return this.state.employees.map(emp => ({ emp, status: this.statusOf(emp) })).filter(({ emp, status }) => {
-        if (q && !(`${emp.name} ${emp.role} ${emp.department}`).toLowerCase().includes(q)) return false;
-        if (dept !== "ALL" && emp.department !== dept) return false;
+      return this.staff().map(emp => ({ emp, status: this.statusOf(emp) })).filter(({ emp, status }) => {
+        if (q && !(`${emp.name} ${emp.role}`).toLowerCase().includes(q)) return false;
         if (wanted === "PRESENT") return isPresent(status.code);
         return wanted === "ALL" || status.code === wanted;
       }).map(row => {
@@ -863,7 +1019,7 @@
             <img src="${avatarFor(emp)}" alt="" class="emp-avatar" width="38" height="38">
             <div><div class="emp-name">${esc(emp.name)}${emp.id === this.me ? ` <span class="you-tag">(you)</span>` : ""}</div><div class="emp-dept">${esc(emp.id)}</div></div>
           </div></td>
-          <td><div style="font-weight:600; color:var(--text-heading);">${esc(emp.department)}</div><div style="font-size:0.75rem; color:var(--text-muted);">${esc(emp.role)}</div></td>
+          <td><div style="font-weight:500; color:var(--text-heading);">${esc(emp.role)}</div></td>
           <td>${badge}</td>
           <td class="mono-time">${agg ? esc(C.formatTime(agg.checkIn, this.tz)) : "--:--"}</td>
           <td class="mono-time">${agg && !agg.open ? esc(C.formatTime(agg.checkOut, this.tz)) : "--:--"}</td>
@@ -878,11 +1034,11 @@
       const rows = this.boardRows();
       const year = Number(C.dateKey(this.now(), this.tz).slice(0, 4));
       const today = C.dateKey(this.now(), this.tz);
-      const header = ["Employee ID", "Name", "Department", "Role", "Date", "Status", "Check-In", "Check-Out", "Worked (min)",
+      const header = ["Employee ID", "Name", "Designation", "Date", "Status", "Check-In", "Check-Out", "Worked (min)",
         "Holiday used", "Medical used", "Emergency used"];
       const lines = rows.map(({ emp, status, agg }) => {
         const bal = C.balances(this.state, emp.id, year);
-        return [emp.id, emp.name, emp.department, emp.role, today, status.code,
+        return [emp.id, emp.name, emp.role, today, status.code,
           agg ? C.formatTime(agg.checkIn, this.tz) : "", agg && !agg.open ? C.formatTime(agg.checkOut, this.tz) : "",
           agg ? agg.workedMin : "", bal.Holiday.used, bal.Medical.used, bal.Emergency.used].map(C.csvField).join(",");
       });
@@ -890,7 +1046,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `PulseAttend_${today}.csv`;
+      a.download = `BKR_Attendance_${today}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -910,7 +1066,7 @@
       badge.textContent = status.onBreak ? "On break" : ui.label;
       $("colleague-avatar").src = avatarFor(emp);
       $("colleague-modal-title").textContent = emp.name;
-      $("colleague-role-dept").textContent = `${emp.role} • ${emp.department} (${emp.id})`;
+      $("colleague-role-dept").textContent = `${emp.role} (${emp.id})`;
       $("colleague-email").textContent = [emp.email, emp.phone].filter(Boolean).join(" • ");
 
       const agg = C.dayAggregate(this.state, emp.id, C.dateKey(now, this.tz), now);
@@ -960,10 +1116,10 @@
       $("btn-plan-holiday-btn").disabled = !emp;
 
       $("balances-subtext").textContent = `Working days taken in ${year} against each person's yearly quota.`;
-      $("team-balances-tbody").innerHTML = this.state.employees.length ? this.state.employees.map(e => {
+      $("team-balances-tbody").innerHTML = this.staff().length ? this.staff().map(e => {
         const b = C.balances(this.state, e.id, year);
         const cell = x => `<td style="font-family:var(--font-mono); font-weight:700;">${x.used} / ${x.quota}</td>`;
-        return `<tr><td><div style="font-weight:700; color:var(--text-heading);">${esc(e.name)}</div><div style="font-size:0.75rem; color:var(--text-muted);">${esc(e.department)}</div></td>${cell(b.Holiday)}${cell(b.Medical)}${cell(b.Emergency)}</tr>`;
+        return `<tr><td><div style="font-weight:700; color:var(--text-heading);">${esc(e.name)}</div><div style="font-size:0.75rem; color:var(--text-muted);">${esc(e.role)}</div></td>${cell(b.Holiday)}${cell(b.Medical)}${cell(b.Emergency)}</tr>`;
       }).join("") : `<tr><td colspan="4" class="empty-cell">No employees yet.</td></tr>`;
 
       this.renderLeaveLog();
@@ -999,12 +1155,11 @@
 
     // ---- holidays tab ------------------------------------------------------
     renderHolidays() {
-      const today = C.dateKey(this.now(), this.tz);
-      const year = today.slice(0, 4);
-      const list = C.PUBLIC_HOLIDAYS.filter(h => h.date.startsWith(year));
-      $("public-holidays-title").textContent = `Office holidays ${year}`;
-      $("public-holidays-count").textContent = `${list.length} listed holidays`;
-      $("public-holidays-list").innerHTML = list.map(h => {
+      const today = this.today();
+      const list = [...this.state.holidays].sort((x, y) => x.date.localeCompare(y.date));
+      $("public-holidays-title").textContent = `Holidays ${C.REGISTER.year}`;
+      $("public-holidays-count").textContent = `${list.length} listed`;
+      $("public-holidays-list").innerHTML = list.length ? list.map(h => {
         const d = C.parseDate(h.date);
         const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
         const weekday = d.toLocaleString("en-US", { weekday: "long", timeZone: "UTC" });
@@ -1012,10 +1167,10 @@
         const label = diff < 0 ? "Past" : diff === 0 ? "Today" : `In ${diff} day${diff === 1 ? "" : "s"}`;
         return `<div class="holiday-item">
           <div class="holiday-date-badge"><span class="holiday-day">${esc(h.date.slice(8))}</span><span class="holiday-month">${esc(month)}</span></div>
-          <div class="holiday-info"><div class="holiday-name">${esc(h.name)}</div><div class="holiday-weekday">${esc(weekday)} • Office closed</div></div>
+          <div class="holiday-info"><div class="holiday-name">${esc(h.name)}</div><div class="holiday-weekday">${esc(weekday)}${[0, 6].includes(C.weekday(h.date)) ? " (weekly off)" : ""}</div></div>
           <span class="status-badge ${diff >= 0 ? "badge-remote" : "badge-checked-out"}">${esc(label)}</span>
         </div>`;
-      }).join("");
+      }).join("") : `<div class="empty-cell">No holidays listed yet.</div>`;
 
       const names = new Map(this.state.employees.map(e => [e.id, e]));
       const away = this.state.leaves

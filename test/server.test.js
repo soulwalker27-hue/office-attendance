@@ -39,7 +39,9 @@ async function signIn(empId, pin = "correct-horse") {
 test("seeds a store on first run and serves the board without needing a login", async () => {
   const j = await state();
   assert.equal(j.tz, "Asia/Kolkata");
-  assert.equal(j.state.employees.length, 10);
+  assert.equal(j.state.employees.length, 7);
+  assert.equal(j.state.employees[0].name, "Bibhu P. Dash");
+  assert.equal(j.state.holidays.length, 6);
   assert.equal(j.me, null);
   assert.deepEqual(j.mine, {});
   assert.ok(Math.abs(j.now - Date.now()) < 5000);
@@ -47,7 +49,7 @@ test("seeds a store on first run and serves the board without needing a login", 
 });
 
 test("data and credential files are owner-only", { skip: process.platform === "win32" }, async () => {
-  await signIn("EMP-110", "perm-check-pin");
+  await signIn("EMP-101");
   for (const f of [process.env.DATA_FILE, path.join(dir, "auth.json")]) assert.equal(fs.statSync(f).mode & 0o077, 0, f);
 });
 
@@ -109,8 +111,8 @@ test("sessions end on logout and cannot be reused", async () => {
 });
 
 test("leave reasons are private: never in the shared board, only for the signed-in author", async () => {
-  const token = await signIn("EMP-108");
-  const other = await signIn("EMP-109");
+  const token = await signIn("EMP-102");
+  const other = await signIn("EMP-103");
   let start = new Date(Date.now() + 40 * 86400000);
   while ([0, 6].includes(start.getUTCDay())) start = new Date(start.getTime() + 86400000);
   const day = start.toISOString().slice(0, 10);
@@ -125,7 +127,7 @@ test("leave reasons are private: never in the shared board, only for the signed-
 });
 
 test("hostile leave and punch payloads are rejected cleanly (no crashes, no prototype tricks)", async () => {
-  const token = await signIn("EMP-110", "perm-check-pin");
+  const token = await signIn("EMP-101");
   for (const leaveType of ["constructor", "__proto__", "toString", "hasOwnProperty", 5, null, { a: 1 }]) {
     const r = await act(token, { type: "leave", leaveType, start: "2026-12-01", end: "2026-12-01", reason: "abc" });
     assert.equal(r.status, 422, String(leaveType));
@@ -134,16 +136,56 @@ test("hostile leave and punch payloads are rejected cleanly (no crashes, no prot
     assert.equal((await act(token, { type })).status, 422, String(type));
   }
   assert.equal((await act(token, { type: "leave", leaveType: "Holiday", start: { x: 1 }, end: [1], reason: {} })).status, 422);
-  assert.ok((await state()).state.employees.length >= 10);
+  assert.ok((await state()).state.employees.length >= 7);
 });
 
-test("adding a colleague works for signed-in users only", async () => {
-  const body = { type: "addEmployee", name: "Test Person", role: "Tester", department: "Engineering", email: "test.person@pulseoffice.example" };
-  assert.equal((await act(null, body)).status, 401);
-  const token = await signIn("EMP-101");
-  const r = await act(token, body);
-  assert.equal(r.status, 200);
-  assert.equal((await state()).state.employees.length, 11);
+test("only admins can add people and holidays, and the change is shared with everyone", async () => {
+  const joiner = { type: "addEmployee", name: "Test Person", role: "Field Assistant", joinDate: "2026-11-02" };
+  assert.equal((await act(null, joiner)).status, 401);
+  const staff = await signIn("EMP-102");
+  assert.equal((await act(staff, joiner)).status, 422);
+  assert.equal((await (await act(staff, joiner)).json()).code, "FORBIDDEN");
+  assert.equal((await (await act(staff, { type: "addHoliday", date: "2026-12-01", name: "X" })).json()).code, "FORBIDDEN");
+
+  const admin = await signIn("EMP-101");
+  assert.equal((await act(admin, joiner)).status, 200);
+  assert.equal((await act(admin, { type: "addHoliday", date: "2026-12-01", name: "Rath Yatra" })).status, 200);
+  const board = await state();
+  assert.ok(board.state.employees.some(e => e.name === "Test Person" && e.joinDate === "2026-11-02"));
+  assert.ok(board.state.holidays.some(h => h.date === "2026-12-01" && h.name === "Rath Yatra"));
+  assert.equal(board.state.holidays.length, 7);
+  assert.equal((await act(admin, { type: "removeHoliday", date: "2026-12-01" })).status, 200);
+  assert.equal((await state()).state.holidays.length, 6);
+});
+
+test("an employee marked as left is signed out and cannot sign back in", async () => {
+  const leaver = await signIn("EMP-107");
+  assert.equal((await state(leaver)).me, "EMP-107");
+  const admin = await signIn("EMP-101");
+  const today = (await state()).tz && new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+  const r = await act(admin, { type: "removeEmployee", targetId: "EMP-107", lastDay: yesterday });
+  assert.equal(r.status, 200, today);
+  assert.equal((await state(leaver)).me, null, "their session no longer works");
+  assert.equal((await act(leaver, { type: "checkin" })).status, 401);
+  const again = await login("EMP-107", "correct-horse");
+  assert.equal(again.status, 200);
+  assert.equal((await act((await again.json()).token, { type: "checkin" })).status, 401, "a signed-in token for a former employee is refused");
+  assert.equal((await act(admin, { type: "reinstateEmployee", targetId: "EMP-107" })).status, 200);
+  assert.equal((await act(await signIn("EMP-107"), { type: "checkin" })).status, 200);
+});
+
+test("admins can clear a colleague's PIN; other people cannot", async () => {
+  const post = (token, body) => api("/api/reset-pin", json(token, body));
+  const staff = await signIn("EMP-102");
+  assert.equal((await post(staff, { targetId: "EMP-105" })).status, 403);
+  assert.equal((await post(null, { targetId: "EMP-105" })).status, 401);
+  await signIn("EMP-105", "pin-105-a");
+  const admin = await signIn("EMP-101");
+  assert.equal((await post(admin, { targetId: "NOPE" })).status, 404);
+  assert.equal((await post(admin, { targetId: "EMP-105" })).status, 200);
+  const fresh = await login("EMP-105", "brand-new-pin-105");
+  assert.equal((await fresh.json()).created, true, "a new PIN was set, not the old one checked");
 });
 
 test("rejects non-JSON, malformed and oversized bodies", async () => {
@@ -178,7 +220,7 @@ test("serves only the whitelisted static files, with security headers", async ()
   assert.equal(page.headers.get("x-content-type-options"), "nosniff");
   assert.equal(page.headers.get("x-frame-options"), "DENY");
   assert.match(page.headers.get("permissions-policy"), /camera=\(\)/);
-  assert.match(await page.text(), /PulseAttend/);
+  assert.match(await page.text(), /BKR Attendance Register/);
   for (const p of ["/core.js", "/app.js", "/style.css"]) assert.equal((await api(p)).status, 200, p);
   for (const p of ["/package.json", "/server.js", "/data/store.json", "/data/auth.json", "/../server.js", "/%2e%2e/server.js", "/test/core.test.js", "/__proto__", "/constructor"]) {
     assert.equal((await api(p)).status, 404, p);
@@ -201,7 +243,7 @@ test("HTML has no inline scripts or handlers (strict CSP stays valid)", () => {
 });
 
 test("reset-pin clears a forgotten PIN while the server keeps running", async () => {
-  const old = await signIn("EMP-105", "old-pin-105");
+  const old = await signIn("EMP-105", "brand-new-pin-105");
   assert.equal((await login("EMP-105", "new-pin-105")).status, 401);
   const out = require("node:child_process").execFileSync(process.execPath, [path.join(__dirname, "..", "server.js"), "--reset-pin", "EMP-105"],
     { env: Object.assign({}, process.env, { DATA_FILE: process.env.DATA_FILE }), encoding: "utf8" });

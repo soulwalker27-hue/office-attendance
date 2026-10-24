@@ -10,9 +10,10 @@ const MIN = 60000, HOUR = 3600000, DAY = 86400000;
 function office() {
   const s = C.emptyState();
   s.employees.push(
-    { id: "EMP-101", name: "Aarav Sharma", role: "Engineer", department: "Engineering", email: "aarav@example.com", phone: "", quota: { holiday: 12, medical: 14, emergency: 7 } },
-    { id: "EMP-102", name: "Ananya Iyer", role: "Designer", department: "Product", email: "ananya@example.com", phone: "", quota: { holiday: 12, medical: 14, emergency: 7 } }
+    { id: "EMP-101", name: "Aarav Sharma", role: "Engineer", email: "aarav@example.com", phone: "", isAdmin: true, joinDate: "2026-01-01", quota: { holiday: 12, medical: 14, emergency: 7 } },
+    { id: "EMP-102", name: "Ananya Iyer", role: "Designer", email: "ananya@example.com", phone: "", isAdmin: false, joinDate: "2026-01-01", quota: { holiday: 12, medical: 14, emergency: 7 } }
   );
+  s.holidays = [{ date: "2026-10-02", name: "Gandhi Jayanti" }, ...C.DEFAULT_HOLIDAYS];
   return s;
 }
 const act = (s, a, now = MON_0930) => C.applyAction(s, a, now, TZ);
@@ -43,21 +44,28 @@ test("zonedMs round-trips wall-clock time, including across DST", () => {
 });
 
 test("countWorkdays skips weekends and public holidays", () => {
-  assert.equal(C.countWorkdays("2026-10-26", "2026-10-30"), 5);
-  assert.equal(C.countWorkdays("2026-10-24", "2026-10-25"), 0);       // Sat–Sun
-  assert.equal(C.countWorkdays("2026-09-28", "2026-10-02"), 4);       // Gandhi Jayanti Fri 2 Oct
-  assert.equal(C.countWorkdays("2026-10-30", "2026-10-26"), 0);       // reversed
-  assert.equal(C.countWorkdays("garbage", "2026-10-26"), 0);
+  const H = C.holidayMap(office());
+  assert.equal(C.countWorkdays("2026-10-26", "2026-10-30", H), 5);
+  assert.equal(C.countWorkdays("2026-10-24", "2026-10-25", H), 0);       // Sat–Sun
+  assert.equal(C.countWorkdays("2026-09-28", "2026-10-02", H), 4);       // Gandhi Jayanti Fri 2 Oct
+  assert.equal(C.countWorkdays("2026-10-30", "2026-10-26", H), 0);       // reversed
+  assert.equal(C.countWorkdays("garbage", "2026-10-26", H), 0);
+  assert.equal(C.countWorkdays("2026-09-28", "2026-10-02"), 5, "no holiday list means no holidays");
 });
 
-test("holiday calendar is well-formed: valid, unique, sorted dates and known weekdays", () => {
-  const dates = C.PUBLIC_HOLIDAYS.map(h => h.date);
+test("BKR's starting holidays are well-formed and on the right weekdays", () => {
+  const dates = C.DEFAULT_HOLIDAYS.map(h => h.date);
+  assert.equal(dates.length, 6);
   assert.equal(new Set(dates).size, dates.length);
   assert.deepEqual(dates, [...dates].sort());
-  for (const h of C.PUBLIC_HOLIDAYS) assert.ok(C.parseDate(h.date), h.date);
-  assert.equal(C.weekday("2026-01-26"), 1);  // Republic Day 2026 is a Monday
-  assert.equal(C.weekday("2026-10-02"), 5);  // Gandhi Jayanti 2026 is a Friday
-  assert.equal(C.weekday("2026-08-15"), 6);  // Independence Day 2026 is a Saturday
+  const day = d => C.weekday(d);
+  assert.equal(C.DEFAULT_HOLIDAYS[0].name, "Kartika Purnima");  assert.equal(day("2026-11-24"), 2);
+  assert.equal(day("2026-12-25"), 5);
+  assert.equal(day("2027-01-14"), 4);
+  assert.equal(day("2027-01-26"), 2);
+  assert.equal(day("2027-03-06"), 6);  // Maha Shivaratri falls on a Saturday
+  assert.equal(day("2027-03-22"), 1);
+  assert.deepEqual(C.REGISTER.months, ["2026-11", "2026-12", "2027-01", "2027-02", "2027-03"]);
 });
 
 test("check-in → break → check-out records true durations", () => {
@@ -231,18 +239,91 @@ test("privacy: broadcast view never contains leave reasons or contacts", () => {
   assert.equal(s.leaves[0].reason, "Chemotherapy"); // original untouched
 });
 
-test("addEmployee validates and assigns unique ids", () => {
+test("admin actions are refused for everyone except admins", () => {
   const s = office();
-  const add = o => act(s, Object.assign({ type: "addEmployee", name: "Linus T", role: "Maintainer", department: "Engineering", email: "linus@example.com" }, o));
+  const body = { type: "addEmployee", name: "Linus T", role: "Maintainer" };
+  assert.equal(act(s, Object.assign({ empId: "EMP-102" }, body)).code, "FORBIDDEN");
+  for (const type of ["removeEmployee", "reinstateEmployee", "setAdmin", "addHoliday", "removeHoliday"]) {
+    assert.equal(act(s, { type, empId: "EMP-102", targetId: "EMP-101", date: "2026-12-01", name: "x" }).code, "FORBIDDEN", type);
+  }
+  assert.equal(s.employees.length, 2);
+  assert.equal(s.holidays.length, 7);
+});
+
+test("a new joiner is added with their own record, from their joining date", () => {
+  const s = office();
+  const add = o => act(s, Object.assign({ type: "addEmployee", empId: "EMP-101", name: "Linus T", role: "Maintainer", joinDate: "2026-11-02" }, o));
   const r = add({});
   assert.equal(r.ok, true);
   assert.equal(r.empId, "EMP-103");
-  assert.equal(add({}).code, "DUP_EMAIL");
-  assert.equal(add({ email: "LINUS@example.com" }).code, "DUP_EMAIL");
+  const linus = s.employees[2];
+  assert.equal(linus.joinDate, "2026-11-02");
+  assert.equal(linus.isAdmin, false);
+  assert.deepEqual(linus.quota, { holiday: 12, medical: 14, emergency: 7 });
+  assert.equal(C.isActive(linus, "2026-10-30"), false, "not yet joined");
+  assert.equal(C.isActive(linus, "2026-11-02"), true);
   assert.equal(add({ email: "not-an-email" }).code, "BAD_EMAIL");
-  assert.equal(add({ name: "x", email: "x@example.com" }).code, "BAD_NAME");
-  assert.equal(add({ department: "Piracy", email: "p@example.com" }).code, "BAD_DEPT");
-  assert.equal(s.employees.length, 3);
+  assert.equal(add({ name: "x" }).code, "BAD_NAME");
+  assert.equal(add({ role: "" }).code, "BAD_ROLE");
+  assert.equal(add({ joinDate: "2026-02-31", name: "Other Person" }).code, "BAD_DATE");
+  assert.equal(add({}).code, "DUP_NAME");
+  assert.equal(add({ name: "Has Email", email: "he@example.com" }).ok, true);
+  assert.equal(add({ name: "Same Email", email: "HE@example.com" }).code, "DUP_EMAIL");
+  assert.equal(add({ name: "No Email Needed" }).ok, true, "email is optional");
+  assert.equal(add({ name: "New Admin", isAdmin: true }).ok, true);
+  assert.equal(s.employees.at(-1).isAdmin, true);
+});
+
+test("someone who leaves drops off the board, keeps their history, and cannot act", () => {
+  const s = office();
+  act(s, { type: "addEmployee", empId: "EMP-101", name: "Leaver One", role: "Driver", joinDate: "2026-01-01" });
+  const id = "EMP-103";
+  act(s, { type: "checkin", empId: id }, MON_0930);
+  act(s, { type: "checkout", empId: id }, MON_0930 + 8 * HOUR);
+  act(s, { type: "leave", empId: id, leaveType: "Holiday", start: "2026-11-09", end: "2026-11-10", reason: "Trip" });
+  assert.equal(act(s, { type: "leave", empId: id, leaveType: "Holiday", start: "2026-10-27", end: "2026-10-27", reason: "Before" }).ok, true);
+  const out = act(s, { type: "removeEmployee", empId: "EMP-101", targetId: id, lastDay: "2026-10-28" });
+  assert.equal(out.ok, true);
+  assert.match(out.message, /1 later leave request/);
+  assert.equal(s.employees.find(e => e.id === id).leftOn, "2026-10-28");
+  assert.equal(C.isActive(s.employees[2], "2026-10-28"), true, "still active on the last day");
+  assert.equal(C.isActive(s.employees[2], "2026-10-29"), false);
+  assert.equal(act(s, { type: "checkin", empId: id }, MON_0930 + 3 * DAY).code, "INACTIVE");
+  assert.equal(C.activeEmployees(s, "2026-10-29").length, 2);
+  assert.equal(s.attendance.filter(a => a.empId === id).length, 1, "history kept");
+  assert.equal(s.leaves.find(l => l.start === "2026-11-09").status, "Cancelled");
+  assert.equal(s.leaves.find(l => l.start === "2026-10-27").status, "Approved");
+  assert.equal(act(s, { type: "reinstateEmployee", empId: "EMP-101", targetId: id }).ok, true);
+  assert.equal(C.isActive(s.employees[2], "2026-12-01"), true);
+  assert.equal(act(s, { type: "reinstateEmployee", empId: "EMP-101", targetId: id }).code, "NOT_LEFT");
+});
+
+test("the last admin cannot be removed or demoted; admin rights can be handed over", () => {
+  const s = office();
+  assert.equal(act(s, { type: "removeEmployee", empId: "EMP-101", targetId: "EMP-101" }).code, "LAST_ADMIN");
+  assert.equal(act(s, { type: "setAdmin", empId: "EMP-101", targetId: "EMP-101", isAdmin: false }).code, "LAST_ADMIN");
+  assert.equal(act(s, { type: "setAdmin", empId: "EMP-101", targetId: "EMP-102", isAdmin: true }).ok, true);
+  assert.equal(act(s, { type: "removeEmployee", empId: "EMP-102", targetId: "EMP-101", lastDay: "2026-10-26" }).ok, true);
+  assert.equal(act(s, { type: "removeEmployee", empId: "EMP-102", targetId: "EMP-102" }, MON_0930 + DAY).code, "LAST_ADMIN");
+  assert.equal(act(s, { type: "removeEmployee", empId: "EMP-102", targetId: "NOPE" }).code, "NOT_FOUND");
+});
+
+test("admins add and remove holidays; they change leave counting and the day's status", () => {
+  const s = office();
+  const add = (date, name) => act(s, { type: "addHoliday", empId: "EMP-101", date, name });
+  assert.equal(C.countWorkdays("2026-11-02", "2026-11-06", C.holidayMap(s)), 5);
+  assert.equal(add("2026-11-04", "Founders' Day").ok, true);
+  assert.equal(C.countWorkdays("2026-11-02", "2026-11-06", C.holidayMap(s)), 4);
+  const wed = Date.UTC(2026, 10, 4, 5, 0);
+  assert.equal(C.statusFor(s, "EMP-102", wed, TZ).note, "Founders' Day");
+  assert.equal(add("2026-11-04", "Again").code, "DUP_HOLIDAY");
+  assert.equal(add("2026-02-31", "Bad").code, "BAD_DATE");
+  assert.equal(add("2026-11-05", "x").code, "BAD_NAME");
+  assert.deepEqual(s.holidays.map(h => h.date), [...s.holidays.map(h => h.date)].sort());
+  assert.equal(act(s, { type: "removeHoliday", empId: "EMP-101", date: "2026-11-04" }).ok, true);
+  assert.equal(C.countWorkdays("2026-11-02", "2026-11-06", C.holidayMap(s)), 5);
+  assert.equal(act(s, { type: "removeHoliday", empId: "EMP-101", date: "2026-11-04" }).code, "NOT_FOUND");
+  assert.equal(s.holidays.length, 7);
 });
 
 test("text input is stripped of control characters and length-capped", () => {
@@ -261,51 +342,76 @@ test("escapeHtml and csvField neutralise injection", () => {
   assert.equal(C.csvField(42), '"42"');
 });
 
-test("seed data is valid and consistent for any day of the week", () => {
-  for (let i = 0; i < 700; i++) {
-    const now = Date.UTC(2026, 0, 1 + i, 7, 0);
-    const s = C.seedState(now, TZ);
-    assert.equal(s.employees.length, 10);
-    const ids = new Set(s.leaves.map(l => l.id));
-    assert.equal(ids.size, s.leaves.length);
-    for (const l of s.leaves) {
-      assert.ok(l.days >= 1, `leave has working days (day offset ${i})`);
-      assert.equal(l.days, C.countWorkdays(l.start, l.end));
-      for (const other of s.leaves) {
-        if (other !== l && other.empId === l.empId) assert.ok(l.end < other.start || l.start > other.end, "no overlaps");
-      }
-    }
-    for (const e of s.employees) {
-      const b = C.balances(s, e.id, 2026);
-      for (const type of Object.keys(b)) assert.ok(b[type].used <= b[type].quota);
-    }
-    const today = C.dateKey(now, TZ);
-    for (const r of s.attendance) {
-      assert.ok(r.date <= today);
-      assert.ok(r.checkIn < now, "no punches from the future");
-      assert.ok(C.isWorkday(r.date));
-      if (r.date < today) {
-        assert.ok(r.checkOut > r.checkIn);
-        assert.ok(C.workedMinutes(r, now) > 6 * 60);
-      } else if (r.checkOut != null) {
-        assert.ok(r.checkOut > r.checkIn && r.checkOut < now);
-      }
-      assert.ok(!C.leaveOn(s, r.empId, r.date), "no punches on seeded leave days");
-    }
+test("a fresh install holds BKR's seven people, Bibhu as admin, and the six holidays", () => {
+  const s = C.seedState();
+  assert.deepEqual(s.employees.map(e => [e.id, e.name, e.role]), [
+    ["EMP-101", "Bibhu P. Dash", "Admin"],
+    ["EMP-102", "Pradyumna Sahoo", "Co-Ordinator \u2013 Programs"],
+    ["EMP-103", "Abhijit Nayak", "Research Assistant"],
+    ["EMP-104", "Poonam Das", "Associate Scientist"],
+    ["EMP-105", "Priyadarsani Barik", "Research Assistant"],
+    ["EMP-106", "Dinabandhu Behera", "Driver"],
+    ["EMP-107", "Baidyanath Sing", "Field Coordinator"]
+  ]);
+  assert.deepEqual(s.employees.map(e => e.isAdmin), [true, false, false, false, false, false, false]);
+  assert.deepEqual(s.holidays.map(h => [h.date, h.name]), [
+    ["2026-11-24", "Kartika Purnima"], ["2026-12-25", "Christmas"], ["2027-01-14", "Makar Sankranti"],
+    ["2027-01-26", "Republic Day"], ["2027-03-06", "Maha Shivaratri"], ["2027-03-22", "Holi"]
+  ]);
+  assert.deepEqual([s.attendance.length, s.leaves.length], [0, 0], "a real register starts empty");
+  assert.equal(C.migrate(JSON.parse(JSON.stringify(s))).holidays.length, 6);
+});
+
+test("older saved data is upgraded without losing anything", () => {
+  const old = { version: 2, employees: [{ id: "EMP-101", name: "Old Timer", role: "Clerk" }], attendance: [{ id: "A1" }], leaves: [] };
+  const up = C.migrate(old);
+  assert.equal(up.version, 3);
+  assert.equal(up.holidays.length, 6);
+  assert.equal(up.employees[0].isAdmin, true, "someone must be able to administer");
+  assert.equal(up.attendance.length, 1);
+});
+
+test("the monthly register marks present, absent, leave, holidays and weekly offs", () => {
+  const s = C.seedState();
+  const now = Date.UTC(2026, 11, 29, 6, 0); // Tue 29 Dec 2026 11:30 IST
+  const book = (empId, leaveType, start, end) => act(s, { type: "leave", empId, leaveType, start, end, reason: "Because" }, Date.UTC(2026, 11, 1, 6, 0));
+  assert.equal(book("EMP-103", "Medical", "2026-12-08", "2026-12-09").ok, true);
+  assert.equal(book("EMP-102", "Holiday", "2026-12-14", "2026-12-14").ok, true);
+  for (const day of [1, 2, 3, 4, 7]) {
+    const t = Date.UTC(2026, 11, day, 4, 0);
+    act(s, { type: "checkin", empId: "EMP-101", mode: day === 7 ? "Remote" : "Office" }, t);
+    act(s, { type: "checkout", empId: "EMP-101" }, t + 8 * HOUR);
   }
+  const reg = C.registerMonth(s, "2026-12", now, TZ);
+  assert.equal(reg.days.length, 31);
+  const bibhu = reg.rows[0];
+  assert.deepEqual(bibhu.cells.slice(0, 8), ["P", "P", "P", "P", "W", "W", "R", "A"]);
+  assert.equal(bibhu.cells[24], "H", "25 Dec is a holiday");
+  assert.equal(bibhu.cells[28], "", "today has no punch yet, so it is not marked absent");
+  assert.equal(bibhu.cells[29], "", "the future is blank");
+  assert.deepEqual([bibhu.totals.P, bibhu.totals.R, bibhu.totals.A], [4, 1, 14]);
+  const abhijit = reg.rows[2];
+  assert.deepEqual([abhijit.cells[7], abhijit.cells[8], abhijit.totals.ML], ["ML", "ML", 2]);
+  assert.equal(reg.rows[1].cells[13], "HL");
+  assert.equal(C.registerMonth(s, "2027-02", now, TZ).days.length, 28);
+  assert.equal(C.registerMonth(s, "nonsense", now, TZ), null);
+  // someone who joined mid-month is blank before joining; someone who left is blank afterwards
+  act(s, { type: "addEmployee", empId: "EMP-101", name: "Late Joiner", role: "Clerk", joinDate: "2026-12-10" }, now);
+  act(s, { type: "removeEmployee", empId: "EMP-101", targetId: "EMP-106", lastDay: "2026-12-15" }, now);
+  const reg2 = C.registerMonth(s, "2026-12", now, TZ);
+  const joiner = reg2.rows.find(r => r.emp.name === "Late Joiner");
+  assert.deepEqual(joiner.cells.slice(7, 10), ["", "", "A"]);
+  const leaver = reg2.rows.find(r => r.emp.id === "EMP-106");
+  assert.equal(leaver.cells[16], "", "after the last working day");
+  assert.equal(C.registerMonth(s, "2027-01", now, TZ).rows.some(r => r.emp.id === "EMP-106"), false, "left before the month began");
 });
 
-test("seed puts leave on the next working day so the board is meaningful", () => {
-  const s = C.seedState(MON_0930, TZ);
-  const codes = s.employees.map(e => C.statusFor(s, e.id, MON_0930, TZ).code);
-  assert.ok(codes.includes("MEDICAL_LEAVE"));
-  assert.ok(codes.includes("EMERGENCY_LEAVE"));
-});
-
-test("nextHoliday finds the upcoming company holiday", () => {
-  assert.equal(C.nextHoliday("2026-10-24").name, "Diwali");
-  assert.equal(C.nextHoliday("2026-11-08").date, "2026-11-08");
-  assert.equal(C.nextHoliday("2026-12-26").date, "2027-01-26");
+test("nextHoliday finds the upcoming holiday from the saved list", () => {
+  const s = C.seedState();
+  assert.equal(C.nextHoliday(s, "2026-10-24").name, "Kartika Purnima");
+  assert.equal(C.nextHoliday(s, "2026-11-24").date, "2026-11-24");
+  assert.equal(C.nextHoliday(s, "2026-12-26").date, "2027-01-14");
+  assert.equal(C.nextHoliday(s, "2027-03-23"), null);
 });
 
 test("formatDuration is zero-padded and never negative", () => {
@@ -324,24 +430,14 @@ test("validTimeZone rejects missing and bogus zones (server falls back to the ma
 
 test("publicView windows old attendance so payloads stay bounded", () => {
   const s = office();
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 250; i++) {
     const day = MON_0930 - i * DAY;
     s.attendance.push({ id: "A" + i, empId: "EMP-101", date: C.dateKey(day, TZ), checkIn: day, checkOut: day + HOUR, mode: "Office", breaks: [] });
   }
   const windowed = C.publicView(s, { now: MON_0930, tz: TZ });
-  assert.equal(windowed.attendance.length, 46);
-  assert.equal(C.publicView(s).attendance.length, 100);
-  assert.equal(s.attendance.length, 100);
-});
-
-test("seed shows a lived-in office on a working day (some in, some not yet) but never before anyone could have arrived", () => {
-  const afternoon = Date.UTC(2026, 9, 26, 8, 30); // Mon 14:00 IST
-  const s = C.seedState(afternoon, TZ);
-  const codes = s.employees.map(e => C.statusFor(s, e.id, afternoon, TZ).code);
-  assert.ok(codes.filter(c => c === "CHECKED_IN" || c === "REMOTE").length >= 3, codes.join());
-  const dawn = Date.UTC(2026, 9, 26, 0, 30); // Mon 06:00 IST
-  const early = C.seedState(dawn, TZ);
-  assert.equal(early.attendance.filter(r => r.date === "2026-10-26").length, 0);
+  assert.equal(windowed.attendance.length, 201);
+  assert.equal(C.publicView(s).attendance.length, 250);
+  assert.equal(s.attendance.length, 250);
 });
 
 test("hostile input cannot reach Object.prototype members or crash validation", () => {
@@ -373,10 +469,3 @@ test("abuse caps: punches per day, breaks per session, leaves per employee", () 
   assert.equal(r.code, "TOO_MANY"); // the 101st toggle would open break #51
 });
 
-test("seed's first account is Bibhu, with a clean email", () => {
-  const s = C.seedState(MON_0930, TZ);
-  assert.equal(s.employees[0].id, "EMP-101");
-  assert.equal(s.employees[0].name, "Bibhu");
-  assert.equal(s.employees[0].email, "bibhu@pulseoffice.example");
-  assert.ok(s.employees.every(e => /^[a-z.]+@pulseoffice\.example$/.test(e.email)), s.employees.map(e => e.email).join());
-});

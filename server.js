@@ -82,11 +82,11 @@ function quarantine(file, err) {
 function loadState() {
   try {
     const parsed = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    if (parsed && Array.isArray(parsed.employees) && Array.isArray(parsed.attendance) && Array.isArray(parsed.leaves)) return parsed;
+    if (parsed && Array.isArray(parsed.employees) && Array.isArray(parsed.attendance) && Array.isArray(parsed.leaves)) return core.migrate(parsed);
     throw new Error("unexpected shape");
   } catch (err) {
     if (err.code !== "ENOENT") quarantine(DATA_FILE, err);
-    const seeded = core.seedState(Date.now(), TZ);
+    const seeded = core.seedState();
     writePrivate(DATA_FILE, JSON.stringify(seeded));
     return seeded;
   }
@@ -146,7 +146,9 @@ function sessionFrom(req) {
   if (!m) return null;
   const key = sha256(m[1]);
   const s = own(auth.sessions, key) ? auth.sessions[key] : null;
-  if (!s || s.exp <= Date.now() || !core.getEmployee(state, s.empId)) return null;
+  if (!s || s.exp <= Date.now()) return null;
+  const emp = core.getEmployee(state, s.empId);
+  if (!emp || !core.isActive(emp, core.dateKey(Date.now(), TZ))) return null; // someone who has left is signed out
   return { key, empId: s.empId };
 }
 
@@ -290,6 +292,22 @@ async function login(req, res) {
   return sendJson(res, 200, { ok: true, token, empId, created });
 }
 
+/** Admin: clear a colleague's PIN (they choose a new one at their next sign-in). */
+async function resetPinFor(req, res) {
+  const session = sessionFrom(req);
+  if (!session) return sendJson(res, 401, { ok: false, code: "AUTH", error: "Please sign in again." });
+  const admin = core.getEmployee(state, session.empId);
+  if (!admin || !admin.isAdmin) return sendJson(res, 403, { ok: false, code: "FORBIDDEN", error: "Only an admin can do that." });
+  const body = await readJson(req, res);
+  if (!body) return;
+  const target = core.getEmployee(state, typeof body.targetId === "string" ? body.targetId : "");
+  if (!target) return sendJson(res, 404, { ok: false, code: "NOT_FOUND", error: "Employee not found." });
+  delete auth.pins[target.id];
+  for (const [key, s] of Object.entries(auth.sessions)) if (s.empId === target.id) delete auth.sessions[key];
+  persistAuth();
+  return sendJson(res, 200, { ok: true, message: `${target.name}'s PIN was cleared. They set a new one at their next sign-in.`, view: view(sessionFrom(req)) });
+}
+
 function logout(req, res) {
   const session = sessionFrom(req);
   if (session) { delete auth.sessions[session.key]; persistAuth(); }
@@ -357,6 +375,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "GET" && url.pathname === "/api/state") return sendJson(res, 200, view(sessionFrom(req)));
       if (isPost && url.pathname === "/api/login") return await login(req, res);
       if (isPost && url.pathname === "/api/logout") return logout(req, res);
+      if (isPost && url.pathname === "/api/reset-pin") return await resetPinFor(req, res);
       if (isPost && url.pathname === "/api/action") return await action(req, res);
       return sendJson(res, 404, { ok: false, code: "NOT_FOUND", error: "No such endpoint." });
     }

@@ -2487,3 +2487,46 @@ body { background-image: none; font-size: 15px; line-height: 1.6; color: var(--t
   .card-header h2, .directory-title-block h2, .leave-history-card h2 { font-size: 1.35rem; }
   .session-timer-box { margin-left: 0; }
 }
+
+/* --------------------------------------------------------------------------
+   Register, admin, forms
+   -------------------------------------------------------------------------- */
+.register-controls { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.register-legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem; }
+.register-legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.register-scroll { overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: 8px; }
+.register-scroll:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.register-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 0.78rem; }
+.register-table th, .register-table td { border-bottom: 1px solid var(--border-subtle); border-right: 1px solid var(--border-subtle); padding: 0; text-align: center; }
+.register-table thead th { background: var(--table-th-bg); font-weight: 500; color: var(--text-secondary); padding: 0.35rem 0; min-width: 2.1rem; }
+.register-table thead th small { display: block; font-size: 0.65rem; color: var(--text-muted); }
+.register-table .rg-off { background: var(--tone-grey-bg); }
+.register-table .rg-name { position: sticky; left: 0; z-index: 1; background: var(--bg-card); text-align: left; padding: 0.5rem 0.75rem; min-width: 11.5rem; max-width: 14rem; white-space: normal; }
+.register-table thead .rg-name { background: var(--table-th-bg); }
+.register-table .rg-name .rg-n { display: block; font-weight: 500; color: var(--text-heading); font-size: 0.85rem; overflow-wrap: anywhere; }
+.register-table .rg-name small { color: var(--text-muted); font-size: 0.72rem; }
+.register-table .rg-cell { height: 2.4rem; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500; }
+.register-table .rg-total { padding: 0 0.6rem; min-width: 3.2rem; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.rc { font-weight: 600; }
+.rc-P { background: var(--tone-green-bg); color: var(--tone-green); }
+.rc-R { background: var(--tone-blue-bg); color: var(--tone-blue); }
+.rc-A { background: var(--tone-red-bg); color: var(--tone-red); }
+.rc-ML, .rc-EL { background: var(--tone-yellow-bg); color: var(--tone-yellow); }
+.rc-HL { background: var(--tone-purple-bg); color: var(--tone-purple); }
+.rc-H, .rc-W { background: var(--tone-grey-bg); color: var(--tone-grey); }
+b.rc { display: inline-block; min-width: 1.7rem; padding: 0.1rem 0.3rem; border-radius: 4px; text-align: center; font-family: var(--font-mono); font-size: 0.72rem; }
+
+.admin-actions { white-space: normal; }
+.admin-actions .view-profile-btn { width: auto; margin: 0.15rem 0.25rem 0.15rem 0; }
+.holiday-form { display: grid; grid-template-columns: 11rem minmax(0, 1fr) auto; gap: 0.75rem; align-items: end; margin-bottom: 1rem; }
+.holiday-form .form-group { margin-bottom: 0; }
+.holiday-form .primary-btn { height: 2.6rem; }
+.check-row { display: flex; align-items: center; gap: 0.6rem; font-size: 0.88rem; color: var(--text-main); margin: 0.25rem 0 0.75rem; cursor: pointer; }
+.check-row input { width: 1rem; height: 1rem; accent-color: var(--accent-bg); }
+.brand-title { white-space: nowrap; }
+@media (max-width: 700px) {
+  .holiday-form { grid-template-columns: 1fr; }
+  .holiday-form .primary-btn { width: 100%; }
+  .register-table .rg-name { min-width: 8.5rem; }
+  .data-table td.admin-actions { justify-content: flex-start; flex-wrap: wrap; text-align: left; }
+}

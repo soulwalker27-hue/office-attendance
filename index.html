@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PulseAttend | Office Attendance & Leave Tracking</title>
-  <meta name="description" content="Shared office attendance board: check-in and check-out times, medical, emergency and holiday leave — visible to everyone.">
+  <title>BKR Attendance Register (2026-27)</title>
+  <meta name="description" content="BKR attendance register for 2026-27: daily check-in and check-out, leave, holidays and a monthly register, visible to everyone.">
   <meta name="color-scheme" content="light dark">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M8 17l5 5 11-12' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -25,8 +25,8 @@
             <span class="live-pulse-dot"></span>
           </div>
           <div class="brand-text">
-            <div class="brand-title">Pulse<span class="brand-highlight">Attend</span></div>
-            <div class="brand-subtitle">Office Attendance & Leave Portal</div>
+            <div class="brand-title">BKR Attendance Register</div>
+            <div class="brand-subtitle">2026-27 &middot; November to March</div>
           </div>
         </div>
 
@@ -67,11 +67,17 @@
             <span>Team board</span>
             <span class="badge-count" id="active-in-office-count" aria-label="people present">0</span>
           </button>
+          <button class="nav-tab" role="tab" aria-selected="false" aria-controls="tab-register" data-tab="register" id="tab-btn-register" type="button" tabindex="-1">
+            <span>Register</span>
+          </button>
           <button class="nav-tab" role="tab" aria-selected="false" aria-controls="tab-leave-tracker" data-tab="leave-tracker" id="tab-btn-leave-tracker" type="button" tabindex="-1">
             <span>Leave</span>
           </button>
           <button class="nav-tab" role="tab" aria-selected="false" aria-controls="tab-holiday-calendar" data-tab="holiday-calendar" id="tab-btn-holiday-calendar" type="button" tabindex="-1">
             <span>Holidays</span>
+          </button>
+          <button class="nav-tab" role="tab" aria-selected="false" aria-controls="tab-admin" data-tab="admin" id="tab-btn-admin" type="button" tabindex="-1" hidden>
+            <span>Admin</span>
           </button>
         </div>
       </nav>
@@ -281,9 +287,8 @@
             </div>
             <div class="directory-filters">
               <div class="search-input-wrapper">
-                <input type="search" id="directory-search-input" placeholder="Search name, role or department…" class="search-field" aria-label="Search colleagues">
+                <input type="search" id="directory-search-input" placeholder="Search name or designation…" class="search-field" aria-label="Search colleagues">
               </div>
-              <select id="department-filter" class="filter-select" aria-label="Filter by department"></select>
               <select id="status-filter" class="filter-select" aria-label="Filter by status">
                 <option value="ALL">All statuses</option>
                 <option value="PRESENT">Present (office or remote)</option>
@@ -295,7 +300,7 @@
                 <option value="DAY_OFF">Day off</option>
               </select>
               <button id="btn-export-attendance" class="secondary-btn" type="button"><span>Export CSV</span></button>
-              <button id="btn-add-employee" class="secondary-btn" type="button"><span>Add colleague</span></button>
+              
             </div>
           </div>
           <div class="table-responsive">
@@ -303,7 +308,7 @@
               <caption class="sr-only">Today's attendance for every employee</caption>
               <thead>
                 <tr>
-                  <th scope="col">Employee</th><th scope="col">Department & Role</th><th scope="col">Today's Status</th>
+                  <th scope="col">Employee</th><th scope="col">Designation</th><th scope="col">Today's Status</th>
                   <th scope="col">Check-In</th><th scope="col">Check-Out</th><th scope="col">Worked</th>
                   <th scope="col">Leave</th><th scope="col"><span class="sr-only">Actions</span></th>
                 </tr>
@@ -428,12 +433,92 @@
           </div>
         </div>
       </section>
+
+      <!-- TAB: MONTHLY REGISTER -->
+      <section class="tab-panel" id="tab-register" role="tabpanel" aria-labelledby="tab-btn-register" hidden>
+        <div class="glass-card">
+          <div class="card-header">
+            <div>
+              <h2>Attendance register</h2>
+              <p class="section-subtext" id="register-subtext">Month by month, one row per person.</p>
+            </div>
+            <div class="register-controls">
+              <label for="register-month" class="sr-only">Month</label>
+              <select id="register-month" class="filter-select"></select>
+              <button id="btn-export-register" class="secondary-btn" type="button"><span>Export CSV</span></button>
+            </div>
+          </div>
+          <div class="register-legend" aria-label="Legend">
+            <span><b class="rc rc-P">P</b> Present</span>
+            <span><b class="rc rc-R">R</b> Remote</span>
+            <span><b class="rc rc-A">A</b> Absent</span>
+            <span><b class="rc rc-ML">ML</b> Medical</span>
+            <span><b class="rc rc-EL">EL</b> Emergency</span>
+            <span><b class="rc rc-HL">HL</b> Holiday leave</span>
+            <span><b class="rc rc-H">H</b> Public holiday</span>
+            <span><b class="rc rc-W">W</b> Weekly off</span>
+          </div>
+          <div class="register-scroll" id="register-scroll" tabindex="0" role="region" aria-label="Attendance register for the month"></div>
+        </div>
+      </section>
+
+      <!-- TAB: ADMIN -->
+      <section class="tab-panel" id="tab-admin" role="tabpanel" aria-labelledby="tab-btn-admin" hidden>
+        <div class="leaves-layout">
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <h2>People</h2>
+                <p class="section-subtext">Add new joiners and record when someone leaves. Their past attendance and leave stay in the register.</p>
+              </div>
+              <button id="btn-add-employee" class="primary-btn" type="button"><span>Add employee</span></button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <caption class="sr-only">All employees, current and former</caption>
+                <thead>
+                  <tr><th scope="col">Name</th><th scope="col">Designation</th><th scope="col">Joined</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
+                </thead>
+                <tbody id="admin-people-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-header">
+              <div>
+                <h2>Holidays</h2>
+                <p class="section-subtext">Holidays are skipped when counting leave days and show as H in the register.</p>
+              </div>
+            </div>
+            <form id="holiday-form" class="holiday-form" novalidate>
+              <div class="form-group">
+                <label for="holiday-date" class="form-label">Date</label>
+                <input type="date" id="holiday-date" class="form-control" required>
+              </div>
+              <div class="form-group holiday-name-field">
+                <label for="holiday-name" class="form-label">Name</label>
+                <input type="text" id="holiday-name" class="form-control" maxlength="60" required autocomplete="off" placeholder="e.g. Rath Yatra">
+              </div>
+              <button type="submit" class="primary-btn"><span>Add holiday</span></button>
+            </form>
+            <p class="form-error" id="holiday-form-error" role="alert" hidden></p>
+            <div class="table-responsive">
+              <table class="data-table">
+                <caption class="sr-only">Holiday list</caption>
+                <thead><tr><th scope="col">Date</th><th scope="col">Holiday</th><th scope="col">Day</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody id="admin-holidays-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer class="app-footer">
       <div class="footer-content">
         <div class="footer-left">
-          <span>PulseAttend • Office attendance & leave</span>
+          <span>BKR Attendance Register 2026-27</span>
           <span class="divider" aria-hidden="true">|</span>
           <span class="text-muted" id="footer-sync">Not synced yet</span>
         </div>
@@ -557,8 +642,8 @@
       <div class="modal-header">
         <div class="modal-title-group">
           <div>
-            <h3 id="employee-modal-title">Add a colleague</h3>
-            <p class="modal-sub">New people start with 12 holiday, 14 medical and 7 emergency days</p>
+            <h3 id="employee-modal-title">Add an employee</h3>
+            <p class="modal-sub">They appear in the register from their joining date. 12 holiday, 14 medical and 7 emergency days a year.</p>
           </div>
         </div>
         <button class="modal-close-btn" id="employee-modal-close" type="button" aria-label="Close">&times;</button>
@@ -570,28 +655,29 @@
         </div>
         <div class="form-row-2">
           <div class="form-group">
-            <label for="emp-role" class="form-label">Job title <span class="required">*</span></label>
-            <input type="text" id="emp-role" class="form-control" maxlength="60" required autocomplete="off">
+            <label for="emp-role" class="form-label">Designation <span class="required">*</span></label>
+            <input type="text" id="emp-role" class="form-control" maxlength="60" required autocomplete="off" placeholder="e.g. Research Assistant">
           </div>
           <div class="form-group">
-            <label for="emp-dept" class="form-label">Department <span class="required">*</span></label>
-            <select id="emp-dept" class="form-control" required></select>
+            <label for="emp-join" class="form-label">Joining date <span class="required">*</span></label>
+            <input type="date" id="emp-join" class="form-control" required>
           </div>
         </div>
         <div class="form-row-2">
           <div class="form-group">
-            <label for="emp-email" class="form-label">Work email <span class="required">*</span></label>
-            <input type="email" id="emp-email" class="form-control" maxlength="80" required autocomplete="off">
+            <label for="emp-email" class="form-label">Email (optional)</label>
+            <input type="email" id="emp-email" class="form-control" maxlength="80" autocomplete="off">
           </div>
           <div class="form-group">
             <label for="emp-phone" class="form-label">Phone (optional)</label>
             <input type="tel" id="emp-phone" class="form-control" maxlength="30" autocomplete="off">
           </div>
         </div>
+        <label class="check-row"><input type="checkbox" id="emp-admin"> Can manage people and holidays (admin)</label>
         <p class="form-error" id="employee-form-error" role="alert" hidden></p>
         <div class="modal-footer">
           <button type="button" class="secondary-btn" id="employee-cancel-btn">Cancel</button>
-          <button type="submit" class="primary-btn"><span>Add colleague</span></button>
+          <button type="submit" class="primary-btn"><span>Add employee</span></button>
         </div>
       </form>
     </div>
@@ -623,6 +709,33 @@
         <div class="modal-footer">
           <button type="button" class="secondary-btn" id="auth-cancel-btn">Cancel</button>
           <button type="submit" class="primary-btn" id="auth-submit">Sign in</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: MARK AS LEFT -->
+  <div class="modal-backdrop" id="leaver-modal" role="dialog" aria-modal="true" aria-labelledby="leaver-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div>
+            <h3 id="leaver-title">Mark as left</h3>
+            <p class="modal-sub" id="leaver-sub"></p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="leaver-modal-close" type="button" aria-label="Close">&times;</button>
+      </div>
+      <form id="leaver-form" class="modal-form" novalidate>
+        <div class="form-group">
+          <label for="leaver-date" class="form-label">Last working day <span class="required">*</span></label>
+          <input type="date" id="leaver-date" class="form-control" required>
+        </div>
+        <p class="section-subtext">After this date they are removed from the team board and cannot sign in. Their past records stay in the register, and any leave booked after this date is cancelled.</p>
+        <p class="form-error" id="leaver-error" role="alert" hidden></p>
+        <div class="modal-footer">
+          <button type="button" class="secondary-btn" id="leaver-cancel-btn">Cancel</button>
+          <button type="submit" class="primary-btn"><span>Mark as left</span></button>
         </div>
       </form>
     </div>

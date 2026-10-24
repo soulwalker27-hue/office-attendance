@@ -1,13 +1,16 @@
-# PulseAttend — Office Attendance & Leave Tracker
+# BKR Attendance Register (2026-27)
 
-A shared attendance board for an office. Everyone can see, live:
+Attendance and leave register for BKR's team, visible to everyone and kept by an admin.
 
-- who has **checked in / out** and at what time (office or remote), including breaks
-- who is on **medical leave**, **emergency leave** or **holiday**
-- how many leave days each person has taken this year against their quota
-- the company holiday calendar and who is away soon
+- **Daily:** check in and out (office or work from home), breaks, who is in right now.
+- **Leave:** medical (14 days), emergency (7) and holiday (12) a year, booked by the employee, counted in working days.
+- **Monthly register:** November 2026 to March 2027, one row per person, with P, R, A, ML, EL, HL, H and W marks and totals. Export any month as CSV.
+- **Admin (Bibhu P. Dash to start with):** add new joiners with their joining date, mark someone as left on their last working day (history is kept), add or remove holidays, make others admins, clear a forgotten PIN.
 
-No runtime dependencies: plain HTML/CSS/JS in the browser and a small Node server (Node 18+). Playwright is a dev-only test tool.
+Starting team: Bibhu P. Dash (Admin), Pradyumna Sahoo, Abhijit Nayak, Poonam Das, Priyadarsani Barik, Dinabandhu Behera, Baidyanath Sing.
+Starting holidays: Kartika Purnima (24 Nov 2026), Christmas (25 Dec), Makar Sankranti (14 Jan 2027), Republic Day (26 Jan), Maha Shivaratri (6 Mar), Holi (22 Mar). Saturday and Sunday are weekly offs.
+
+No runtime dependencies: plain HTML/CSS/JS and a small Node server (Node 18+).
 
 ## Run it for the whole office
 
@@ -19,8 +22,8 @@ OFFICE_TZ=Asia/Kolkata npm start            # timezone that defines "today" (def
 ```
 
 Everyone opens the server's address, picks their name in **Signed in as**, sets a personal PIN the
-first time (6+ characters), and punches in. All browsers see the same data (refreshes every 10 s). Data is stored in `data/store.json`
-(override with `DATA_FILE`). First start creates demo employees — add real ones with **Add colleague**.
+first time (6+ characters), and punches in. Bibhu signs in first and then manages everything from the **Admin** tab. All browsers see the same data (refreshes every 10 s). Data is stored in `data/store.json`
+(override with `DATA_FILE`). A first start creates the BKR team and holidays above. Everything is saved in `data/` and survives restarts.
 
 Opening `index.html` directly (or any static host) still works in **local demo mode**: data
 stays in that browser only, and a banner says so.
@@ -39,8 +42,8 @@ stays in that browser only, and a banner says so.
 ## Tests
 
 ```bash
-npm test          # 51 unit + API tests (node:test): rules, timezones, privacy, auth, security headers
-npm run test:e2e  # 20 browser tests (Playwright, desktop + phone): sign-in, punches, leave, privacy,
+npm test          # 56 unit + API tests (node:test): rules, timezones, privacy, auth, security headers
+npm run test:e2e  # 26 browser tests (Playwright, desktop + phone): sign-in, punches, leave, privacy,
                   # restart persistence, server outage recovery, retry safety, worst-case data, layout
 ```
 

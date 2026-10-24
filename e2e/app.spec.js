@@ -26,7 +26,7 @@ test("fresh install opens Bibhu's set-up, and the PIN rules are explained", asyn
   const errors = noPageErrors();
   await page.goto(server.url);
   await expect(page.locator("#auth-modal")).toHaveClass(/open/);
-  await expect(page.locator("#auth-title")).toHaveText("Set up Bibhu's profile");
+  await expect(page.locator("#auth-title")).toHaveText("Set up Bibhu P. Dash's profile");
   await page.fill("#auth-pin", "abc");
   await page.fill("#auth-pin2", "abc");
   await page.click("#auth-submit");
@@ -37,13 +37,13 @@ test("fresh install opens Bibhu's set-up, and the PIN rules are explained", asyn
   await expect(page.locator("#auth-error")).toHaveText("The two PINs do not match.");
   await page.fill("#auth-pin2", "bibhu-pin-2026");
   await page.click("#auth-submit");
-  await expect(page.locator("#current-user-name")).toHaveText("Bibhu");
+  await expect(page.locator("#current-user-name")).toHaveText("Bibhu P. Dash");
   expect(errors).toEqual([]);
 });
 
 test("check in, break, check out — and the team board shows it", async () => {
   await page.goto(server.url);
-  await expect(page.locator("#current-user-name")).toHaveText("Bibhu"); // remembered sign-in
+  await expect(page.locator("#current-user-name")).toHaveText("Bibhu P. Dash"); // remembered sign-in
   await page.click("#btn-check-in");
   await expect(page.locator("#punch-status-text")).toHaveText("Working — in the office");
   await page.click("#btn-break-toggle");
@@ -87,8 +87,8 @@ test("privacy: a colleague sees the leave but not the reason", async ({ browser 
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto(server.url);
-  await page.locator("#auth-modal").evaluate(m => m.classList.remove("open")); // dismiss nothing-to-claim prompt if any
-  await signIn(page, "EMP-103", "rohan-pin-2026");
+  await signIn(page, "EMP-103", "abhijit-pin-2026");
+  await expect(page.locator("#tab-btn-admin")).toBeHidden(); // staff never see the admin area
   await page.click("#tab-btn-leave-tracker");
   const row = page.locator("#all-leaves-tbody tr", { hasText: "Bibhu" }).first();
   await expect(row).toContainText("Emergency");
@@ -97,14 +97,109 @@ test("privacy: a colleague sees the leave but not the reason", async ({ browser 
   await ctx.close();
 });
 
+test("admin: add a joiner, record a leaver, add a holiday — and the register follows", async () => {
+  await page.goto(server.url);
+  await expect(page.locator("#tab-btn-admin")).toBeVisible();
+  await page.click("#tab-btn-admin");
+
+  // new joiner
+  await page.click("#btn-add-employee");
+  await page.fill("#emp-name", "Sunita Rout");
+  await page.fill("#emp-role", "Field Assistant");
+  await page.fill("#emp-join", "2026-11-09");
+  await page.click('#employee-form button[type="submit"]');
+  await expect(page.locator("#employee-modal")).not.toHaveClass(/open/);
+  const sunita = page.locator("#admin-people-tbody tr", { hasText: "Sunita Rout" });
+  await expect(sunita).toContainText("Field Assistant");
+  await expect(sunita).toContainText("2026-11-09");
+  await page.click("#btn-add-employee");
+  await page.fill("#emp-name", "Sunita Rout");
+  await page.fill("#emp-role", "Duplicate");
+  await page.click('#employee-form button[type="submit"]');
+  await expect(page.locator("#employee-form-error")).toContainText("already exists");
+  await page.click("#employee-cancel-btn");
+
+  // she appears in the register from her joining date, not before
+  await page.click("#tab-btn-register");
+  await page.selectOption("#register-month", "2026-11");
+  const row = page.locator(".register-table tbody tr", { hasText: "Sunita Rout" });
+  await expect(row).toBeVisible();
+  const cells = await row.locator("td.rg-cell").allTextContents();
+  expect(cells.slice(0, 8).every(c => c === "")).toBe(true); // before 9 Nov
+  await expect(page.locator(".register-table thead")).toContainText("30");
+
+  // holiday
+  await page.click("#tab-btn-admin");
+  await page.fill("#holiday-date", "2026-12-14");
+  await page.fill("#holiday-name", "Founders Day");
+  await page.click('#holiday-form button[type="submit"]');
+  await expect(page.locator("#admin-holidays-tbody")).toContainText("Founders Day");
+  await page.fill("#holiday-date", "2026-12-14");
+  await page.fill("#holiday-name", "Again");
+  await page.click('#holiday-form button[type="submit"]');
+  await expect(page.locator("#holiday-form-error")).toContainText("already a holiday");
+  await page.click("#tab-btn-holiday-calendar");
+  await expect(page.locator("#public-holidays-list")).toContainText("Founders Day");
+  await expect(page.locator("#public-holidays-list")).toContainText("Kartika Purnima");
+  await expect(page.locator("#public-holidays-list")).toContainText("Maha Shivaratri");
+  await page.click("#tab-btn-register");
+  await page.selectOption("#register-month", "2026-12");
+  const dec14 = page.locator('.register-table tbody tr', { hasText: "Bibhu P. Dash" }).locator("td.rg-cell").nth(13);
+  await expect(dec14).toHaveText("H");
+
+  // leaver: gone from the board and the sign-in list, still in the register
+  await page.click("#tab-btn-admin");
+  await page.locator("#admin-people-tbody tr", { hasText: "Sunita Rout" }).getByRole("button", { name: "Mark as left" }).click();
+  await page.fill("#leaver-date", "2026-11-20");
+  await page.click('#leaver-form button[type="submit"]');
+  await expect(page.locator("#admin-people-tbody tr", { hasText: "Sunita Rout" })).toContainText("Joins 2026-11-09");
+  await page.click("#tab-btn-team-directory");
+  await expect(page.locator("#team-directory-tbody")).not.toContainText("Sunita Rout"); // has not started yet
+  await expect(page.locator("#employee-switcher-select option", { hasText: "Sunita Rout" })).toHaveCount(0);
+});
+
+test("admin: someone who left in the past leaves the board and the sign-in list but stays in the register", async () => {
+  await page.goto(server.url);
+  const token = await page.evaluate(() => localStorage.getItem("pulse_token"));
+  const post = data => page.request.post(server.url + "/api/action", { headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, data });
+  await post({ type: "addEmployee", name: "Past Employee", role: "Driver", joinDate: "2026-04-01" });
+  const id = (await (await page.request.get(server.url + "/api/state")).json()).state.employees.find(e => e.name === "Past Employee").id;
+  const yesterday = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
+  expect((await post({ type: "removeEmployee", targetId: id, lastDay: yesterday })).ok()).toBeTruthy();
+  await page.reload();
+  await page.click("#tab-btn-team-directory");
+  await expect(page.locator("#team-directory-tbody")).not.toContainText("Past Employee");
+  await expect(page.locator("#employee-switcher-select option", { hasText: "Past Employee" })).toHaveCount(0);
+  await page.click("#tab-btn-admin");
+  const row = page.locator("#admin-people-tbody tr", { hasText: "Past Employee" });
+  await expect(row).toContainText("Left");
+  await row.getByRole("button", { name: "Reinstate" }).click();
+  await expect(row).toContainText("Active");
+});
+
+test("register: months Nov to Mar only, CSV export, holidays marked", async () => {
+  await page.goto(server.url);
+  await page.click("#tab-btn-register");
+  const months = await page.locator("#register-month option").allTextContents();
+  expect(months).toEqual(["November 2026", "December 2026", "January 2027", "February 2027", "March 2027"]);
+  await page.selectOption("#register-month", "2027-03");
+  await expect(page.locator(".register-table tbody tr").first().locator("td.rg-cell").nth(5)).toHaveText("H"); // 6 Mar Maha Shivaratri
+  await expect(page.locator(".register-table tbody tr").first().locator("td.rg-cell").nth(21)).toHaveText("H"); // 22 Mar Holi
+  const [download] = await Promise.all([page.waitForEvent("download"), page.click("#btn-export-register")]);
+  expect(download.suggestedFilename()).toBe("BKR_Attendance_Register_2027-03.csv");
+});
+
 test("everything is remembered after the server restarts", async () => {
   await server.restart();
   await page.goto(server.url);
-  await expect(page.locator("#current-user-name")).toHaveText("Bibhu");
+  await expect(page.locator("#current-user-name")).toHaveText("Bibhu P. Dash");
   await expect(page.locator("#punch-status-text")).toHaveText("Checked out for the day");
   await expect(page.locator("#card-emergency-used")).toHaveText("2");
   await page.click("#tab-btn-leave-tracker");
   await expect(page.locator("#all-leaves-tbody")).toContainText("Family function in Cuttack");
+  await page.click("#tab-btn-admin");
+  await expect(page.locator("#admin-holidays-tbody")).toContainText("Founders Day");
+  await expect(page.locator("#admin-people-tbody")).toContainText("Sunita Rout");
   await page.click("#theme-toggle-btn");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -139,7 +234,7 @@ test("worst-case data: long names, emails and roles do not break the layout", as
   const token = await page.evaluate(() => localStorage.getItem("pulse_token"));
   const add = data => page.request.post(server.url + "/api/action", {
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-    data: Object.assign({ type: "addEmployee", department: "Sales & Ops" }, data)
+    data: Object.assign({ type: "addEmployee", joinDate: "2026-04-01" }, data)
   });
   expect((await add({ name: "Aleksandra Wiśniewska-Kowalczyk Venkataraghavan", role: "Senior Regional Partnerships & Channel Enablement Manager", email: "aleksandra.wisniewska-kowalczyk@northwind-industries-holdings.example.com" })).ok()).toBeTruthy();
   expect((await add({ name: "Jo", role: "Intern", email: "jo@pulseoffice.example" })).ok()).toBeTruthy();
@@ -159,7 +254,7 @@ test("worst-case data: long names, emails and roles do not break the layout", as
 test("every screen fits the viewport and has no console errors", async () => {
   const errors = noPageErrors();
   await page.goto(server.url);
-  for (const tab of ["my-desk", "team-directory", "leave-tracker", "holiday-calendar"]) {
+  for (const tab of ["my-desk", "team-directory", "register", "leave-tracker", "holiday-calendar", "admin"]) {
     await page.click(`#tab-btn-${tab}`);
     await expect(page.locator(`#tab-${tab}`)).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

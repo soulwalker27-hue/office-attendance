@@ -21,7 +21,6 @@
     Holiday: { key: "holiday", quota: 12, status: "HOLIDAY", backdateDays: 0 }
   };
 
-  const DEPARTMENTS = ["Engineering", "Design", "Human Resources", "Marketing", "Product", "Sales & Ops"];
   const WORK_MODES = ["Office", "Remote"];
   const MAX_LEAVE_SPAN_DAYS = 90;
   const MAX_EMPLOYEES = 500;
@@ -29,27 +28,24 @@ const MAX_PUNCHES_PER_DAY = 20;
 const MAX_BREAKS_PER_SESSION = 50;
 const MAX_LEAVES_PER_EMPLOYEE = 200;
 
-  // Official office closures (India). `date` is ISO; weekday/status are always derived.
-  // Only dates fixed by the calendar or widely agreed are listed. Moon-dependent festival
-  // dates (Eid, Muharram, and some Holi/Diwali/Dussehra dates) differ by source and state,
-  // so HR should confirm them against the DoPT/office notification and add them here.
-  const PUBLIC_HOLIDAYS = [
-    { date: "2026-01-26", name: "Republic Day" },
-    { date: "2026-03-04", name: "Holi" },
-    { date: "2026-04-03", name: "Good Friday" },
-    { date: "2026-08-15", name: "Independence Day" },
-    { date: "2026-09-04", name: "Janmashtami" },
-    { date: "2026-10-02", name: "Gandhi Jayanti" },
-    { date: "2026-10-20", name: "Dussehra" },
-    { date: "2026-11-08", name: "Diwali" },
-    { date: "2026-12-25", name: "Christmas Day" },
+  // Holidays live in the data (state.holidays) so an admin can add or remove them.
+  // These are the BKR holidays for November 2026 to March 2027 that a fresh install starts with.
+  const DEFAULT_HOLIDAYS = [
+    { date: "2026-11-24", name: "Kartika Purnima" },
+    { date: "2026-12-25", name: "Christmas" },
+    { date: "2027-01-14", name: "Makar Sankranti" },
     { date: "2027-01-26", name: "Republic Day" },
-    { date: "2027-03-26", name: "Good Friday" },
-    { date: "2027-08-15", name: "Independence Day" },
-    { date: "2027-10-02", name: "Gandhi Jayanti" },
-    { date: "2027-12-25", name: "Christmas Day" }
+    { date: "2027-03-06", name: "Maha Shivaratri" },
+    { date: "2027-03-22", name: "Holi" }
   ];
-  const HOLIDAY_BY_DATE = new Map(PUBLIC_HOLIDAYS.map(h => [h.date, h.name]));
+
+  // The register the app keeps: months shown in the monthly register view.
+  const REGISTER = {
+    title: "BKR Attendance Register",
+    year: "2026-27",
+    months: ["2026-11", "2026-12", "2027-01", "2027-02", "2027-03"]
+  };
+  const MAX_HOLIDAYS = 120;
 
   // --------------------------------------------------------------------------
   // Dates & time (timezone-explicit)
@@ -116,27 +112,33 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
     return parseDate(str).getUTCDay(); // 0 = Sunday
   }
 
-  function holidayName(str) {
-    return HOLIDAY_BY_DATE.get(str) || null;
+  /** Date -> name lookup for a state's holidays (or a plain array of {date,name}). */
+  function holidayMap(source) {
+    const list = Array.isArray(source) ? source : (source && source.holidays) || [];
+    return new Map(list.map(h => [h.date, h.name]));
   }
 
-  function isWorkday(str) {
+  function holidayName(str, hol) {
+    return (hol && hol.get(str)) || null;
+  }
+
+  function isWorkday(str, hol) {
     const wd = weekday(str);
-    return wd !== 0 && wd !== 6 && !HOLIDAY_BY_DATE.has(str);
+    return wd !== 0 && wd !== 6 && !(hol && hol.has(str));
   }
 
-  /** Working days (Mon–Fri, excluding public holidays) in [start, end]. */
-  function countWorkdays(start, end) {
+  /** Working days (Mon-Fri, excluding holidays) in [start, end]. */
+  function countWorkdays(start, end, hol) {
     const s = parseDate(start), e = parseDate(end);
     if (!s || !e || s > e) return 0;
     let n = 0;
-    for (let cur = start; cur <= end; cur = addDays(cur, 1)) if (isWorkday(cur)) n++;
+    for (let cur = start; cur <= end; cur = addDays(cur, 1)) if (isWorkday(cur, hol)) n++;
     return n;
   }
 
-  function nextWorkday(str) {
+  function nextWorkday(str, hol) {
     let cur = str;
-    while (!isWorkday(cur)) cur = addDays(cur, 1);
+    while (!isWorkday(cur, hol)) cur = addDays(cur, 1);
     return cur;
   }
 
@@ -210,7 +212,7 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
   // State queries
   // --------------------------------------------------------------------------
   function emptyState() {
-    return { version: 2, employees: [], attendance: [], leaves: [] };
+    return { version: 3, employees: [], attendance: [], leaves: [], holidays: [] };
   }
 
   function getEmployee(state, empId) {
@@ -300,8 +302,9 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
     if (todays.length) return { code: "CHECKED_OUT", onBreak: false, rec: todays[todays.length - 1] };
     const leave = leaveOn(state, empId, today);
     if (leave) return { code: LEAVE_TYPES[leave.type].status, onBreak: false, leave };
-    if (!isWorkday(today)) {
-      return { code: "DAY_OFF", onBreak: false, note: holidayName(today) || "Weekend" };
+    const hol = holidayMap(state);
+    if (!isWorkday(today, hol)) {
+      return { code: "DAY_OFF", onBreak: false, note: holidayName(today, hol) || "Weekend" };
     }
     return { code: "NOT_CHECKED_IN", onBreak: false };
   }
@@ -335,8 +338,21 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
     return dates.map(d => dayAggregate(state, empId, d, now));
   }
 
-  function nextHoliday(today) {
-    return PUBLIC_HOLIDAYS.find(h => h.date >= today) || null;
+  function nextHoliday(state, today) {
+    return [...(state.holidays || [])].sort((a, b) => a.date.localeCompare(b.date)).find(h => h.date >= today) || null;
+  }
+
+  /** Active on `date`: joined on or before it and not yet past the last working day. */
+  function isActive(emp, date) {
+    return Boolean(emp) && (!emp.joinDate || emp.joinDate <= date) && (!emp.leftOn || date <= emp.leftOn);
+  }
+
+  function activeEmployees(state, date) {
+    return state.employees.filter(e => isActive(e, date));
+  }
+
+  function adminsOn(state, date) {
+    return state.employees.filter(e => e.isAdmin && isActive(e, date));
   }
 
   // --------------------------------------------------------------------------
@@ -362,7 +378,7 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
         ? `${input.type} leave can be back-dated at most ${meta.backdateDays} days.`
         : `${input.type} leave must start today or later.`);
     }
-    const days = countWorkdays(input.start, input.end);
+    const days = countWorkdays(input.start, input.end, holidayMap(state));
     if (days === 0) return fail("NO_WORKDAYS", "That range has no working days (weekends and public holidays are excluded).");
     const clash = approvedLeaves(state, input.empId).find(l => input.start <= l.end && input.end >= l.start);
     if (clash) return fail("OVERLAP", `You already have ${clash.type} leave from ${clash.start} to ${clash.end}.`);
@@ -377,15 +393,29 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
   // --------------------------------------------------------------------------
   // Mutations — every one returns {ok} or {ok:false, code, error}
   // --------------------------------------------------------------------------
+  const ADMIN_ACTIONS = new Set(["addEmployee", "removeEmployee", "reinstateEmployee", "setAdmin", "addHoliday", "removeHoliday"]);
+
   function applyAction(state, action, now, tz) {
     if (!action || typeof action !== "object") return fail("BAD_ACTION", "Malformed request.");
+    const actor = getEmployee(state, action.empId);
+    if (!actor) return fail("NO_EMPLOYEE", "Select who you are first.");
+    const today = dateKey(now, tz);
+    if (!isActive(actor, today)) return fail("INACTIVE", "This profile is not active.");
+    if (typeof action.type === "string" && ADMIN_ACTIONS.has(action.type) && !actor.isAdmin) {
+      return fail("FORBIDDEN", "Only an admin can do that.");
+    }
     switch (action.type) {
       case "checkin": return checkIn(state, action, now, tz);
       case "checkout": return checkOut(state, action, now, tz);
       case "break": return toggleBreak(state, action, now, tz);
       case "leave": return requestLeave(state, action, now, tz);
       case "cancelLeave": return cancelLeave(state, action, now, tz);
-      case "addEmployee": return addEmployee(state, action);
+      case "addEmployee": return addEmployee(state, action, today);
+      case "removeEmployee": return removeEmployee(state, action, today);
+      case "reinstateEmployee": return reinstateEmployee(state, action);
+      case "setAdmin": return setAdmin(state, action, today);
+      case "addHoliday": return addHoliday(state, action);
+      case "removeHoliday": return removeHoliday(state, action);
       default: return fail("BAD_ACTION", "Unknown action.");
     }
   }
@@ -472,23 +502,86 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
     return ok({ message: `${leave.type} leave cancelled; ${leave.days} day(s) returned to your balance.` });
   }
 
-  function addEmployee(state, a) {
+  function addEmployee(state, a, today) {
     const name = cleanText(a.name, 60);
     const role = cleanText(a.role, 60);
     const email = cleanText(a.email, 80).toLowerCase();
     const phone = cleanText(a.phone, 30);
+    const joinDate = a.joinDate ? String(a.joinDate) : today;
     if (name.length < 2) return fail("BAD_NAME", "Enter the employee's full name.");
-    if (role.length < 2) return fail("BAD_ROLE", "Enter a job title.");
-    if (!DEPARTMENTS.includes(a.department)) return fail("BAD_DEPT", "Choose a department.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail("BAD_EMAIL", "Enter a valid email address.");
-    if (state.employees.some(e => e.email.toLowerCase() === email)) return fail("DUP_EMAIL", "An employee with that email already exists.");
+    if (role.length < 2) return fail("BAD_ROLE", "Enter a designation.");
+    if (!parseDate(joinDate)) return fail("BAD_DATE", "Enter a valid joining date.");
+    if (joinDate > addDays(today, 366) || joinDate < "2000-01-01") return fail("BAD_DATE", "Joining date is out of range.");
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail("BAD_EMAIL", "Enter a valid email address, or leave it empty.");
+    if (email && state.employees.some(e => (e.email || "").toLowerCase() === email)) return fail("DUP_EMAIL", "An employee with that email already exists.");
+    if (state.employees.some(e => e.name.toLowerCase() === name.toLowerCase() && (!e.leftOn || e.leftOn >= today))) return fail("DUP_NAME", "An active employee with that name already exists.");
     if (state.employees.length >= MAX_EMPLOYEES) return fail("FULL", "Employee limit reached.");
     const next = state.employees.reduce((m, e) => Math.max(m, Number(e.id.replace(/\D/g, "")) || 0), 100) + 1;
     state.employees.push({
-      id: `EMP-${next}`, name, role, department: a.department, email, phone,
+      id: `EMP-${next}`, name, role, email, phone, joinDate, isAdmin: a.isAdmin === true,
       quota: { holiday: 12, medical: 14, emergency: 7 }
     });
-    return ok({ message: `${name} added to the directory.`, empId: `EMP-${next}` });
+    return ok({ message: `${name} added to the register (joined ${joinDate}).`, empId: `EMP-${next}` });
+  }
+
+  function removeEmployee(state, a, today) {
+    const target = getEmployee(state, a.targetId);
+    if (!target) return fail("NOT_FOUND", "Employee not found.");
+    if (target.leftOn && target.leftOn <= today) return fail("ALREADY_LEFT", `${target.name} has already left.`);
+    const lastDay = a.lastDay ? String(a.lastDay) : today;
+    if (!parseDate(lastDay)) return fail("BAD_DATE", "Enter a valid last working day.");
+    if (target.joinDate && lastDay < target.joinDate) return fail("BAD_DATE", "Last working day is before the joining date.");
+    if (lastDay > addDays(today, 366)) return fail("BAD_DATE", "Last working day is too far ahead.");
+    if (target.isAdmin && adminsOn(state, today).filter(e => e.id !== target.id).length === 0) {
+      return fail("LAST_ADMIN", "Make someone else an admin before removing the last admin.");
+    }
+    target.leftOn = lastDay;
+    // Leave booked for after the last day no longer applies.
+    let cancelled = 0;
+    state.leaves.forEach(l => {
+      if (l.empId === target.id && l.status === "Approved" && l.start > lastDay) { l.status = "Cancelled"; cancelled++; }
+    });
+    return ok({ message: `${target.name} marked as left (last working day ${lastDay}).${cancelled ? ` ${cancelled} later leave request(s) cancelled.` : ""}` });
+  }
+
+  function reinstateEmployee(state, a) {
+    const target = getEmployee(state, a.targetId);
+    if (!target) return fail("NOT_FOUND", "Employee not found.");
+    if (!target.leftOn) return fail("NOT_LEFT", `${target.name} is already active.`);
+    delete target.leftOn;
+    return ok({ message: `${target.name} is active again.` });
+  }
+
+  function setAdmin(state, a, today) {
+    const target = getEmployee(state, a.targetId);
+    if (!target) return fail("NOT_FOUND", "Employee not found.");
+    const makeAdmin = a.isAdmin === true;
+    if (!makeAdmin && target.isAdmin && adminsOn(state, today).filter(e => e.id !== target.id).length === 0) {
+      return fail("LAST_ADMIN", "There must be at least one admin.");
+    }
+    target.isAdmin = makeAdmin;
+    return ok({ message: makeAdmin ? `${target.name} is now an admin.` : `${target.name} is no longer an admin.` });
+  }
+
+  function addHoliday(state, a) {
+    const name = cleanText(a.name, 60);
+    const date = String(a.date || "");
+    state.holidays = state.holidays || [];
+    if (!parseDate(date) || date < "2000-01-01" || date > "2100-12-31") return fail("BAD_DATE", "Enter a valid date.");
+    if (name.length < 2) return fail("BAD_NAME", "Enter the holiday's name.");
+    if (state.holidays.some(h => h.date === date)) return fail("DUP_HOLIDAY", `${date} is already a holiday (${holidayName(date, holidayMap(state))}).`);
+    if (state.holidays.length >= MAX_HOLIDAYS) return fail("FULL", "Holiday limit reached.");
+    state.holidays.push({ date, name });
+    state.holidays.sort((x, y) => x.date.localeCompare(y.date));
+    return ok({ message: `${name} added on ${date}.` });
+  }
+
+  function removeHoliday(state, a) {
+    const date = String(a.date || "");
+    const i = (state.holidays || []).findIndex(h => h.date === date);
+    if (i === -1) return fail("NOT_FOUND", "That holiday is not in the list.");
+    const [gone] = state.holidays.splice(i, 1);
+    return ok({ message: `${gone.name} (${date}) removed.` });
   }
 
   // --------------------------------------------------------------------------
@@ -499,7 +592,7 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
    * Pass {now, tz} to also window attendance to the last `ATTENDANCE_WINDOW_DAYS`,
    * so the payload (and per-render work) stays bounded as history accumulates.
    */
-  const ATTENDANCE_WINDOW_DAYS = 45;
+  const ATTENDANCE_WINDOW_DAYS = 200;
   function publicView(state, opts) {
     let attendance = state.attendance;
     if (opts && opts.now != null) {
@@ -509,6 +602,7 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
     return {
       version: state.version,
       employees: state.employees,
+      holidays: state.holidays || [],
       attendance,
       leaves: state.leaves.map(l => {
         const { reason, contact, ...rest } = l; // eslint-disable-line no-unused-vars
@@ -525,113 +619,91 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
   }
 
   // --------------------------------------------------------------------------
-  // Demo data (relative to "today", so it never goes stale)
+  // Monthly register
   // --------------------------------------------------------------------------
-  function seedState(now, tz) {
+  /**
+   * One month of the register. Cell codes:
+   *   P present (office)  R present (remote)  A absent  ML/EL/HL medical/emergency/holiday leave
+   *   H public holiday    W weekly off        ""  not yet / not employed
+   */
+  function registerMonth(state, month, now, tz) {
+    const first = `${month}-01`;
+    if (!/^\d{4}-\d{2}$/.test(month) || !parseDate(first)) return null;
+    const last = isoOf(new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0)));
+    const today = dateKey(now, tz);
+    const hol = holidayMap(state);
+    const days = [];
+    for (let d = first; d <= last; d = addDays(d, 1)) {
+      days.push({ date: d, day: Number(d.slice(8)), dow: weekday(d), off: hol.has(d) ? "H" : (weekday(d) === 0 || weekday(d) === 6 ? "W" : null), holiday: hol.get(d) || null });
+    }
+    const rows = state.employees
+      .filter(e => (!e.joinDate || e.joinDate <= last) && (!e.leftOn || e.leftOn >= first))
+      .map(emp => {
+        const totals = { P: 0, R: 0, A: 0, ML: 0, EL: 0, HL: 0 };
+        const cells = days.map(day => {
+          if (!isActive(emp, day.date)) return "";
+          const recs = state.attendance.filter(r => r.empId === emp.id && r.date === day.date); // a forgotten check-out still counts as present
+          if (recs.length) {
+            const code = recs.every(r => r.mode === "Remote") ? "R" : "P";
+            totals[code]++;
+            return code;
+          }
+          if (day.off) return day.off;
+          const leave = leaveOn(state, emp.id, day.date);
+          if (leave) {
+            const code = { Medical: "ML", Emergency: "EL", Holiday: "HL" }[leave.type];
+            totals[code]++;
+            return code;
+          }
+          if (day.date < today) { totals.A++; return "A"; }
+          return "";
+        });
+        return { emp, cells, totals };
+      });
+    return { month, first, last, days, rows };
+  }
+
+  // --------------------------------------------------------------------------
+  // Fresh install and upgrades
+  // --------------------------------------------------------------------------
+  /** The BKR roster. Bibhu is the first admin. */
+  function seedState() {
     const state = emptyState();
     const people = [
-      ["Bibhu", "Office Administrator", "Human Resources"],
-      ["Ananya Iyer", "Lead Product Designer", "Design"],
-      ["Rohan Mehta", "HR Operations Lead", "Human Resources"],
-      ["Priya Nair", "Cloud DevOps Architect", "Engineering"],
-      ["Vikram Singh", "Senior Growth Marketing Manager", "Marketing"],
-      ["Neha Kulkarni", "VP of Product Strategy", "Product"],
-      ["Arjun Reddy", "Operations & Logistics Manager", "Sales & Ops"],
-      ["Kavya Menon", "Enterprise Support Specialist", "Sales & Ops"],
-      ["Imran Qureshi", "QA Engineer", "Engineering"],
-      ["Sneha Banerjee", "Content Strategist", "Marketing"]
+      ["Bibhu P. Dash", "Admin", true],
+      ["Pradyumna Sahoo", "Co-Ordinator \u2013 Programs", false],
+      ["Abhijit Nayak", "Research Assistant", false],
+      ["Poonam Das", "Associate Scientist", false],
+      ["Priyadarsani Barik", "Research Assistant", false],
+      ["Dinabandhu Behera", "Driver", false],
+      ["Baidyanath Sing", "Field Coordinator", false]
     ];
-    people.forEach(([name, role, department], i) => {
-      const handle = name.toLowerCase().replace(/[^a-z ]/g, "").split(" ").join(".");
+    people.forEach(([name, role, isAdmin], i) => {
       state.employees.push({
-        id: `EMP-${101 + i}`, name, role, department,
-        email: `${handle}@pulseoffice.example`,
-        phone: `+91 98100 ${String(10000 + i * 137).padStart(5, "0")}`,
+        id: `EMP-${101 + i}`, name, role, email: "", phone: "", joinDate: "2026-04-01", isAdmin,
         quota: { holiday: 12, medical: 14, emergency: 7 }
       });
     });
+    state.holidays = DEFAULT_HOLIDAYS.map(h => Object.assign({}, h));
+    return state;
+  }
 
-    const today = dateKey(now, tz);
-    const anchor = nextWorkday(today);
-    const lastWorkdays = [];
-    for (let cur = addDays(today, -1); lastWorkdays.length < 5; cur = addDays(cur, -1)) {
-      if (isWorkday(cur)) lastWorkdays.push(cur);
-    }
-    const addLeave = (empId, type, start, end, reason, contact, appliedOn) => {
-      state.leaves.push({
-        id: genId("LR", now), empId, type, start, end, days: countWorkdays(start, end),
-        reason, contact, status: "Approved", appliedOn, appliedAt: now
-      });
-    };
-    // Leave is placed on working days (n-th working day from a base) so every seeded
-    // request is valid whatever today's date and however many holidays fall nearby.
-    const wd = (base, n) => {
-      let cur = nextWorkday(base);
-      for (let i = 0; i < Math.abs(n); i++) {
-        cur = addDays(cur, n < 0 ? -1 : 1);
-        while (!isWorkday(cur)) cur = addDays(cur, n < 0 ? -1 : 1);
-      }
-      return cur;
-    };
-    const span = (from, len) => [from, wd(from, len - 1)];
-    const pastStart = lastWorkdays[lastWorkdays.length - 1];
-    addLeave("EMP-104", "Medical", ...span(anchor, 2), "Viral fever, rest advised", "", today);
-    addLeave("EMP-106", "Emergency", ...span(anchor, 1), "Family emergency", "", today);
-    addLeave("EMP-105", "Holiday", ...span(wd(anchor, 5), 5), "Family trip to Goa", "", addDays(today, -9));
-    addLeave("EMP-103", "Holiday", ...span(wd(anchor, 15), 2), "Wedding in the family", "", addDays(today, -3));
-    addLeave("EMP-109", "Holiday", ...span(wd(anchor, 9), 3), "Visiting family", "", addDays(today, -5));
-    addLeave("EMP-101", "Medical", ...span(wd(pastStart, -12), 2), "Dental surgery", "", addDays(pastStart, -16));
-    addLeave("EMP-102", "Holiday", ...span(wd(pastStart, -25), 4), "Design conference", "", addDays(pastStart, -45));
-    state.leaves.sort((a, b) => b.start.localeCompare(a.start));
-
-    const hash = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
-    state.employees.forEach(emp => {
-      lastWorkdays.forEach(date => {
-        if (leaveOn(state, emp.id, date)) return;
-        const h = hash(emp.id + date);
-        const inMin = 8 * 60 + 30 + (h % 50);                // 08:30–09:19
-        const outMin = 17 * 60 + (h % 70);                   // 17:00–18:09
-        const rec = {
-          id: genId("A", now), empId: emp.id, date,
-          checkIn: zonedMs(date, Math.floor(inMin / 60), inMin % 60, tz),
-          checkOut: zonedMs(date, Math.floor(outMin / 60), outMin % 60, tz),
-          mode: h % 4 === 0 ? "Remote" : "Office", breaks: []
-        };
-        const bs = rec.checkIn + 4 * 3600000 + (h % 30) * 60000;
-        rec.breaks.push({ start: bs, end: bs + (30 + (h % 25)) * 60000 });
-        state.attendance.push(rec);
-      });
-    });
-
-    // Today: whoever is not on leave has (deterministically) either arrived already or not yet.
-    // Only punches that are already in the past are created, so the demo is never "from the future".
-    if (isWorkday(today)) {
-      state.employees.forEach(emp => {
-        const h = hash(emp.id + today);
-        if (leaveOn(state, emp.id, today) || h % 5 === 0) return;
-        const inMin = 8 * 60 + 30 + (h % 55);
-        const checkIn = zonedMs(today, Math.floor(inMin / 60), inMin % 60, tz);
-        if (checkIn > now - 5 * 60000) return;
-        const outMin = 17 * 60 + 15 + (h % 60);
-        const checkOut = zonedMs(today, Math.floor(outMin / 60), outMin % 60, tz);
-        state.attendance.push({
-          id: genId("A", now), empId: emp.id, date: today, checkIn,
-          checkOut: checkOut < now ? checkOut : null,
-          mode: h % 4 === 0 ? "Remote" : "Office", breaks: []
-        });
-      });
-    }
+  /** Brings older saved data up to the current shape (safe to call on every load). */
+  function migrate(state) {
+    state.version = 3;
+    state.holidays = Array.isArray(state.holidays) ? state.holidays : DEFAULT_HOLIDAYS.map(h => Object.assign({}, h));
+    if (!state.employees.some(e => e.isAdmin) && state.employees.length) state.employees[0].isAdmin = true;
     return state;
   }
 
   return {
-    LEAVE_TYPES, DEPARTMENTS, WORK_MODES, PUBLIC_HOLIDAYS, MAX_LEAVE_SPAN_DAYS,
-    dateKey, zonedMs, parseDate, addDays, diffDays, weekday, isWorkday, holidayName,
+    LEAVE_TYPES, WORK_MODES, REGISTER, DEFAULT_HOLIDAYS, MAX_LEAVE_SPAN_DAYS,
+    dateKey, zonedMs, parseDate, addDays, diffDays, weekday, isWorkday, holidayName, holidayMap,
     countWorkdays, nextWorkday, formatTime, formatClock, formatDateLong, formatDateShort,
     formatDay, formatDuration, validTimeZone,
     cleanText, escapeHtml, csvField,
-    emptyState, getEmployee, openSession, breakMinutes, workedMinutes, workedMs, leaveOn, usedDays,
-    balances, statusFor, dayAggregate, history, nextHoliday,
-    validateLeave, applyAction, publicView, privateDetails, seedState
+    emptyState, getEmployee, isActive, activeEmployees, adminsOn, openSession, breakMinutes, workedMinutes, workedMs,
+    leaveOn, usedDays, balances, statusFor, dayAggregate, history, nextHoliday, registerMonth,
+    validateLeave, applyAction, publicView, privateDetails, seedState, migrate
   };
 });
