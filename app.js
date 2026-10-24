@@ -187,10 +187,22 @@
       this.store = await chooseStore();
       $("reset-data-btn").hidden = this.store.mode !== "local";
       await this.refresh();
+      this.offerFirstLogin();
       setInterval(() => this.tick(), 1000);
       setInterval(() => this.refresh(), 10000);
       document.addEventListener("visibilitychange", () => { if (!document.hidden) this.refresh(); });
       window.addEventListener("storage", e => { if (e.key === "pulse_v2") this.refresh(); });
+    }
+
+    /** Fresh install: nobody has signed in yet, so start with the first account (Bibhu). */
+    offerFirstLogin() {
+      const first = this.state.employees[0];
+      if (!first || this.me) return;
+      if (this.store.mode === "local") {
+        if (!storage.get("pulse_me")) { storage.set("pulse_me", first.id); this.refresh(); }
+      } else if (this.view.claimed.length === 0) {
+        this.openAuth(first.id);
+      }
     }
 
     get state() { return this.view.state; }

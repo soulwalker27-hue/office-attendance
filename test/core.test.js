@@ -372,3 +372,11 @@ test("abuse caps: punches per day, breaks per session, leaves per employee", () 
   assert.equal(s2.attendance[0].breaks.length, 50);
   assert.equal(r.code, "TOO_MANY"); // the 101st toggle would open break #51
 });
+
+test("seed's first account is Bibhu, with a clean email", () => {
+  const s = C.seedState(MON_0930, TZ);
+  assert.equal(s.employees[0].id, "EMP-101");
+  assert.equal(s.employees[0].name, "Bibhu");
+  assert.equal(s.employees[0].email, "bibhu@pulseoffice.example");
+  assert.ok(s.employees.every(e => /^[a-z.]+@pulseoffice\.example$/.test(e.email)), s.employees.map(e => e.email).join());
+});

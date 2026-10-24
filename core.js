@@ -530,7 +530,7 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
   function seedState(now, tz) {
     const state = emptyState();
     const people = [
-      ["Aarav Sharma", "Senior Full-stack Engineer", "Engineering"],
+      ["Bibhu", "Office Administrator", "Human Resources"],
       ["Ananya Iyer", "Lead Product Designer", "Design"],
       ["Rohan Mehta", "HR Operations Lead", "Human Resources"],
       ["Priya Nair", "Cloud DevOps Architect", "Engineering"],
@@ -542,10 +542,10 @@ const MAX_LEAVES_PER_EMPLOYEE = 200;
       ["Sneha Banerjee", "Content Strategist", "Marketing"]
     ];
     people.forEach(([name, role, department], i) => {
-      const [first, last] = name.toLowerCase().split(" ");
+      const handle = name.toLowerCase().replace(/[^a-z ]/g, "").split(" ").join(".");
       state.employees.push({
         id: `EMP-${101 + i}`, name, role, department,
-        email: `${first}.${last}@pulseoffice.example`,
+        email: `${handle}@pulseoffice.example`,
         phone: `+91 98100 ${String(10000 + i * 137).padStart(5, "0")}`,
         quota: { holiday: 12, medical: 14, emergency: 7 }
       });
