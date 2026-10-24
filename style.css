@@ -2142,3 +2142,237 @@ fieldset.work-mode-selector legend { padding: 0; }
 
 /* Keep times and column headings on one line in tables */
 .mono-time, .data-table th { white-space: nowrap; }
+
+/* ==========================================================================
+   v4 design layer — "departure board"
+   Quiet paper-and-ink interface; the one loud element is the amber-on-ink
+   clock panel, borrowed from railway signage. IBM Plex throughout.
+   ========================================================================== */
+html[data-theme="light"] {
+  --bg-darkest: #e3e8ef;
+  --bg-primary: #f2f4f8;
+  --bg-secondary: #eaeef4;
+  --bg-surface: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f7f9fc;
+  --bg-glass-input: #f4f6fa;
+  --bg-header: #101c2e;
+  --bg-dropdown: #ffffff;
+  --border-subtle: #dbe1ea;
+  --border-card: #d5dce6;
+  --border-glow: rgba(31, 95, 191, 0.3);
+  --border-focus: #1f5fbf;
+  --text-main: #1b2638;
+  --text-heading: #0d1626;
+  --text-secondary: #47546a;
+  --text-muted: #566377;
+  --primary-500: #1f5fbf;
+  --primary-600: #17499a;
+  --primary-gradient: #101c2e;
+  --primary-glow: rgba(31, 95, 191, 0.18);
+  --emerald-500: #0b7a5a;
+  --amber-500: #a9540a;
+  --rose-500: #c0392b;
+  --cyan-500: #0b6e8a;
+  --emerald-gradient: none; --amber-gradient: none; --rose-gradient: none; --cyan-gradient: none;
+  --emerald-border: rgba(11, 122, 90, 0.4); --amber-border: rgba(169, 84, 10, 0.4);
+  --rose-border: rgba(192, 57, 43, 0.4); --cyan-border: rgba(11, 110, 138, 0.4);
+  --timepiece-bg: #0b1524; --timepiece-border: #1c2b44; --timepiece-text: #ffb81c;
+  --table-th-bg: #eef2f7; --table-hover-bg: #f5f8fc;
+  --body-ambient: none;
+  --shadow-sm: 0 1px 2px rgba(16, 28, 46, 0.06);
+  --shadow-md: 0 1px 3px rgba(16, 28, 46, 0.07);
+  --shadow-lg: 0 12px 32px rgba(16, 28, 46, 0.16);
+  --shadow-glow: none;
+  --accent-bg: #101c2e; --accent-fg: #ffffff;
+  --tone-green: #0b7a5a; --tone-green-bg: rgba(11, 122, 90, 0.11);
+  --tone-blue: #1f5fbf; --tone-blue-bg: rgba(31, 95, 191, 0.1);
+  --tone-orange: #a9540a; --tone-orange-bg: rgba(169, 84, 10, 0.11);
+  --tone-red: #c0392b; --tone-red-bg: rgba(192, 57, 43, 0.1);
+  --tone-teal: #0b6e8a; --tone-teal-bg: rgba(11, 110, 138, 0.1);
+  --tone-grey: #566377; --tone-grey-bg: rgba(86, 99, 119, 0.1);
+}
+
+html[data-theme="dark"] {
+  --bg-darkest: #070b12;
+  --bg-primary: #0c121c;
+  --bg-secondary: #101826;
+  --bg-surface: #131b29;
+  --bg-card: #131b29;
+  --bg-card-hover: #182233;
+  --bg-glass-input: #0f1724;
+  --bg-header: #101c2e;
+  --bg-dropdown: #131b29;
+  --border-subtle: #243249;
+  --border-card: #243249;
+  --border-glow: rgba(127, 176, 255, 0.35);
+  --border-focus: #ffb81c;
+  --text-main: #e6ebf3;
+  --text-heading: #f6f8fb;
+  --text-secondary: #aab6c8;
+  --text-muted: #94a3ba;
+  --primary-500: #86b3ff;
+  --primary-600: #6a9eef;
+  --primary-gradient: #ffb81c;
+  --primary-glow: rgba(255, 184, 28, 0.2);
+  --emerald-500: #3dd6a3;
+  --amber-500: #ffb81c;
+  --rose-500: #ff7f70;
+  --cyan-500: #5cc8e8;
+  --emerald-gradient: none; --amber-gradient: none; --rose-gradient: none; --cyan-gradient: none;
+  --emerald-border: rgba(61, 214, 163, 0.45); --amber-border: rgba(255, 184, 28, 0.45);
+  --rose-border: rgba(255, 127, 112, 0.45); --cyan-border: rgba(92, 200, 232, 0.45);
+  --timepiece-bg: #070d17; --timepiece-border: #1c2b44; --timepiece-text: #ffb81c;
+  --table-th-bg: #0f1724; --table-hover-bg: #172131;
+  --body-ambient: none;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+  --shadow-glow: none;
+  --accent-bg: #ffb81c; --accent-fg: #101c2e;
+  --tone-green: #3dd6a3; --tone-green-bg: rgba(61, 214, 163, 0.12);
+  --tone-blue: #86b3ff; --tone-blue-bg: rgba(134, 179, 255, 0.12);
+  --tone-orange: #ffb81c; --tone-orange-bg: rgba(255, 184, 28, 0.12);
+  --tone-red: #ff7f70; --tone-red-bg: rgba(255, 127, 112, 0.12);
+  --tone-teal: #5cc8e8; --tone-teal-bg: rgba(92, 200, 232, 0.12);
+  --tone-grey: #94a3ba; --tone-grey-bg: rgba(148, 163, 186, 0.12);
+}
+
+:root {
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 12px;
+  --transition-theme: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+body { background-image: none; font-size: 15px; }
+.tab-panel { animation: none; }
+
+/* Header: a dark signage bar in both themes */
+.app-header {
+  --text-heading: #ffffff; --text-main: #e6ebf3; --text-secondary: #b9c5d8; --text-muted: #9fb0c8;
+  --bg-glass-input: rgba(255, 255, 255, 0.07); --border-subtle: rgba(255, 255, 255, 0.16);
+  background: #101c2e;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  border-bottom: 1px solid #0b1524;
+}
+.app-nav { background: #0b1524; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.brand-icon { background: #ffb81c; color: #101c2e; box-shadow: none; border-radius: 8px; }
+.live-pulse-dot { border-color: #101c2e; }
+.brand-title { color: #fff; font-weight: 700; letter-spacing: -0.01em; }
+.brand-highlight { color: #ffb81c; background: none; -webkit-text-fill-color: currentColor; }
+.brand-subtitle { color: #9fb0c8; }
+.live-status-pill, .user-switcher-container, .theme-toggle-btn, .icon-action-btn, .app-header .secondary-btn {
+  border-radius: 8px; color: #e6ebf3; background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.theme-toggle-btn:hover, .icon-action-btn:hover, .app-header .secondary-btn:hover { background: rgba(255, 255, 255, 0.14); transform: none; }
+.employee-dropdown { color: #fff; }
+.employee-dropdown option { background: #101c2e; color: #fff; }
+.switcher-label { color: #9fb0c8; text-transform: none; letter-spacing: 0; }
+.nav-tab { color: #b9c5d8; font-weight: 500; }
+.nav-tab:hover, .nav-tab.active { color: #fff; }
+.nav-tab.active::after { background: #ffb81c; box-shadow: none; height: 3px; border-radius: 0; left: 0.5rem; right: 0.5rem; }
+.badge-count { background: #ffb81c; color: #101c2e; border: none; border-radius: 6px; }
+.app-header :focus-visible { outline-color: #ffb81c; }
+
+/* Cards: flat, bordered, one radius family */
+.glass-card, .leave-hero-card { border-radius: 12px; box-shadow: var(--shadow-sm); padding: 1.5rem; }
+.card-header h2 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; }
+.card-header-compact h3 { font-weight: 600; font-size: 1.05rem; }
+.card-badge { display: none; }
+.sub-pill { border-radius: 6px; }
+
+/* Summary tiles: left rule carries the meaning, no icon boxes */
+.metric-card { background: var(--bg-card); border: 1px solid var(--border-card); border-left-width: 5px; border-radius: 10px; box-shadow: var(--shadow-sm); padding: 1.1rem 1.25rem; }
+.metric-card:hover { transform: none; box-shadow: var(--shadow-sm); }
+.card-gradient-emerald { background: var(--bg-card); border-color: var(--border-card); border-left-color: var(--tone-green); }
+.card-gradient-amber { background: var(--bg-card); border-color: var(--border-card); border-left-color: var(--tone-orange); }
+.card-gradient-rose { background: var(--bg-card); border-color: var(--border-card); border-left-color: var(--tone-red); }
+.card-gradient-cyan { background: var(--bg-card); border-color: var(--border-card); border-left-color: var(--tone-teal); }
+.metric-icon-box { display: none; }
+.metric-title, .mini-label, .item-label, .mode-label { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 0.85rem; color: var(--text-secondary); }
+.item-label, .mini-label { font-size: 0.78rem; font-weight: 500; }
+.metric-val { font-size: 2.1rem; font-weight: 600; }
+.metric-sub { font-size: 0.9rem; }
+
+/* The clock panel — the one memorable thing */
+.timepiece-container {
+  background: var(--timepiece-bg);
+  border: 1px solid var(--timepiece-border);
+  border-top: 4px solid #ffb81c;
+  border-radius: 12px;
+  box-shadow: none;
+  padding: 2rem 1.25rem 1.6rem;
+}
+.digital-clock { color: #ffb81c; font-weight: 500; font-size: clamp(2.2rem, 7vw, 3.6rem); letter-spacing: 0.02em; text-shadow: 0 0 22px rgba(255, 184, 28, 0.28); font-variant-numeric: tabular-nums; }
+.digital-date { color: #dbe3ef; font-size: 1.05rem; font-weight: 500; }
+.digital-timezone { color: #8ea0ba; }
+.punch-status-bar { border-radius: 10px; }
+.timer-value { font-variant-numeric: tabular-nums; }
+
+/* Actions */
+.punch-btn { border-radius: 10px; box-shadow: none; padding: 1.15rem 1rem; }
+.btn-check-in { background: #0b7a5a; color: #fff; }
+.btn-check-out { background: #c0392b; color: #fff; }
+html[data-theme="dark"] .btn-check-in { background: #1a9c76; }
+html[data-theme="dark"] .btn-check-out { background: #d24a3b; }
+.btn-check-in:hover:not(:disabled), .btn-check-out:hover:not(:disabled) { transform: none; box-shadow: none; filter: brightness(0.92); }
+.btn-label { font-weight: 700; font-size: 1.1rem; letter-spacing: 0; }
+.punch-btn:disabled { opacity: 0.4; }
+.primary-btn { background: var(--accent-bg); color: var(--accent-fg); box-shadow: none; border-radius: 8px; font-weight: 600; }
+.primary-btn:hover { filter: brightness(1.12); transform: none; box-shadow: none; }
+.secondary-btn, .aux-btn { border-radius: 8px; font-weight: 500; }
+.aux-btn-leave { background: var(--tone-blue-bg); border-color: transparent; color: var(--tone-blue); }
+.aux-btn-leave:hover { background: var(--tone-blue-bg); filter: brightness(0.96); }
+.radio-custom { border-radius: 8px; }
+.mode-radio input:checked + .radio-custom { background: var(--tone-blue-bg); border-color: var(--tone-blue); color: var(--tone-blue); box-shadow: none; }
+.mode-radio input:focus-visible + .radio-custom { outline: 3px solid var(--border-focus); outline-offset: 2px; }
+.filter-chip { border-radius: 8px; }
+.filter-chip.active { background: var(--accent-bg); color: var(--accent-fg); border-color: var(--accent-bg); }
+.link-btn { color: var(--primary-500); font-weight: 600; }
+
+/* Tables and badges: timetable rows */
+.data-table th { text-transform: none; letter-spacing: 0; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); background: var(--table-th-bg); }
+.data-table td { font-size: 0.9rem; }
+.status-badge { border-radius: 6px; font-weight: 600; font-size: 0.78rem; border: 1px solid transparent; }
+.badge-in-office { background: var(--tone-green-bg); color: var(--tone-green); border-color: transparent; }
+.badge-remote { background: var(--tone-blue-bg); color: var(--tone-blue); border-color: transparent; }
+.badge-medical, .badge-break { background: var(--tone-orange-bg); color: var(--tone-orange); border-color: transparent; }
+.badge-emergency { background: var(--tone-red-bg); color: var(--tone-red); border-color: transparent; }
+.badge-holiday { background: var(--tone-teal-bg); color: var(--tone-teal); border-color: transparent; }
+.badge-checked-out, .badge-not-checked { background: var(--tone-grey-bg); color: var(--tone-grey); border-color: transparent; }
+.view-profile-btn { border-radius: 8px; background: transparent; border: 1px solid var(--border-card); color: var(--text-heading); font-weight: 500; }
+.view-profile-btn:hover { background: var(--bg-card-hover); }
+
+/* Leave cards: a coloured top rule instead of tinted washes */
+.leave-hero-card { background: var(--bg-card); border: 1px solid var(--border-card); border-top: 4px solid var(--border-card); }
+.medical-hero { border-top-color: var(--tone-orange); }
+.emergency-hero { border-top-color: var(--tone-red); }
+.holiday-hero { border-top-color: var(--tone-teal); }
+.hero-badge, .badge-amber, .badge-rose, .badge-cyan { border-radius: 6px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.hero-title { font-weight: 700; }
+.fill-cyan { background: var(--tone-teal); }
+.fill-amber { background: var(--tone-orange); }
+.fill-rose { background: var(--tone-red); }
+.progress-track { border-radius: 4px; } .progress-fill { border-radius: 4px; }
+
+/* Holidays and feed */
+.holiday-date-badge { border-radius: 8px; }
+.holiday-item, .feed-item { border-radius: 10px; }
+.feed-tag { border-radius: 6px; }
+
+/* Dialogs, toasts, banner */
+.modal-card { border-radius: 14px; box-shadow: var(--shadow-lg); }
+.modal-backdrop { backdrop-filter: none; background: rgba(8, 14, 26, 0.6); }
+.form-control { border-radius: 8px; }
+.toast { border-radius: 10px; box-shadow: var(--shadow-lg); }
+.mode-banner { background: var(--tone-orange-bg); color: var(--text-heading); border-bottom: 1px solid var(--amber-border); font-weight: 500; }
+.mode-banner-warn { background: var(--tone-red-bg); border-bottom-color: var(--rose-border); }
+.desk-gate { background: var(--tone-blue-bg); border-color: transparent; border-radius: 10px; }
+.auth-forgot { font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.5rem; }
+.auth-forgot code, .section-subtext code { font-family: var(--font-mono); font-size: 0.8rem; background: var(--bg-glass-input); padding: 0.1rem 0.35rem; border-radius: 4px; word-break: break-all; }
+.app-footer { font-size: 0.8rem; }
+.you-tag { color: var(--primary-500); }

@@ -23,26 +23,48 @@
   // Stores
   // ==========================================================================
   class RemoteStore {
-    constructor() { this.mode = "shared"; }
-
-    pack(j) {
-      return { state: j.state, mine: j.mine || {}, tz: j.tz, skew: j.now - Date.now() };
+    constructor() {
+      this.mode = "shared";
+      this.token = storage.get("pulse_token") || "";
     }
 
-    async load(me) {
-      const r = await fetch("/api/state?me=" + encodeURIComponent(me || ""), { cache: "no-store" });
+    headers() {
+      return Object.assign({ "Content-Type": "application/json" }, this.token ? { Authorization: "Bearer " + this.token } : {});
+    }
+
+    pack(j) {
+      if (this.token && !j.me) this.setToken(""); // the server no longer knows this session
+      return { state: j.state, mine: j.mine || {}, tz: j.tz, skew: j.now - Date.now(), me: j.me || "", claimed: j.claimed || [] };
+    }
+
+    setToken(token) {
+      this.token = token;
+      if (token) storage.set("pulse_token", token); else storage.del("pulse_token");
+    }
+
+    async load() {
+      const r = await fetch("/api/state", { cache: "no-store", headers: this.token ? { Authorization: "Bearer " + this.token } : {} });
       if (!r.ok) throw new Error("HTTP " + r.status);
       return this.pack(await r.json());
     }
 
     async act(action) {
-      const r = await fetch("/api/action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(action)
-      });
+      const r = await fetch("/api/action", { method: "POST", headers: this.headers(), body: JSON.stringify(action) });
       const j = await r.json().catch(() => ({ ok: false, error: "Unexpected server response." }));
+      if (r.status === 401) this.setToken("");
       return { result: j, view: j.view ? this.pack(j.view) : null };
+    }
+
+    async login(empId, pin) {
+      const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ empId, pin }) });
+      const j = await r.json().catch(() => ({ ok: false, error: "Unexpected server response." }));
+      if (j.ok) this.setToken(j.token);
+      return j;
+    }
+
+    async logout() {
+      try { await fetch("/api/logout", { method: "POST", headers: this.headers(), body: "{}" }); } catch (e) { /* offline: still forget the token */ }
+      this.setToken("");
     }
   }
 
@@ -72,13 +94,15 @@
         state: C.publicView(this.data, { now: Date.now(), tz: this.tz }),
         mine: me && C.getEmployee(this.data, me) ? C.privateDetails(this.data, me) : {},
         tz: this.tz,
-        skew: 0
+        skew: 0,
+        me: me && C.getEmployee(this.data, me) ? me : "",
+        claimed: []
       };
     }
 
-    async load(me) {
+    async load() {
       this.data = this.read() || this.data; // pick up edits from other tabs
-      return this.view(me);
+      return this.view(storage.get("pulse_me") || "");
     }
 
     async act(action) {
@@ -142,7 +166,7 @@
     constructor() {
       this.store = null;
       this.view = { state: C.emptyState(), mine: {}, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, skew: 0 };
-      this.me = storage.get("pulse_me") || "";
+      this.me = "";
       this.theme = "light";
       this.sound = storage.get("pulse_sound") !== "off";
       this.audio = null;
@@ -176,13 +200,13 @@
 
     async refresh() {
       try {
-        this.view = await this.store.load(this.me);
+        this.view = await this.store.load();
+        this.me = this.view.me || "";
         this.offline = false;
         this.lastSync = Date.now();
       } catch (e) {
         this.offline = true;
       }
-      if (this.me && !this.currentEmployee()) { this.me = ""; storage.del("pulse_me"); }
       this.renderAll();
     }
 
@@ -195,10 +219,11 @@
       }
       this.busy = true;
       try {
-        action.empId = this.me;
+        action.empId = this.me; // advisory only: a shared server acts as the signed-in session
         const { result, view } = await this.store.act(action);
-        if (view) this.view = view;
+        if (view) { this.view = view; this.me = view.me || ""; }
         this.offline = false;
+        if (result.code === "AUTH") { this.me = ""; this.toast("Your session ended. Please sign in again.", "warning"); }
         this.renderAll();
         return result;
       } catch (e) {
@@ -269,13 +294,10 @@
       });
       $("link-view-all-leaves").addEventListener("click", () => this.showTab("leave-tracker"));
 
-      $("employee-switcher-select").addEventListener("change", e => {
-        this.me = e.target.value;
-        if (this.me) storage.set("pulse_me", this.me); else storage.del("pulse_me");
-        this.refresh();
-        const emp = this.currentEmployee();
-        if (emp) this.toast(`Signed in as ${emp.name}.`, "success");
-      });
+      $("employee-switcher-select").addEventListener("change", e => this.chooseIdentity(e.target.value));
+      $("auth-form").addEventListener("submit", e => this.submitAuth(e));
+      $("auth-cancel-btn").addEventListener("click", () => this.closeModal($("auth-modal")));
+      $("auth-modal-close").addEventListener("click", () => this.closeModal($("auth-modal")));
 
       $("theme-toggle-btn").addEventListener("click", () => this.applyTheme(this.theme === "light" ? "dark" : "light", true));
       $("sound-toggle-btn").addEventListener("click", () => {
@@ -349,6 +371,70 @@
         m.addEventListener("mousedown", e => { if (e.target === m) this.closeModal(m); }));
 
       document.addEventListener("keydown", e => this.onKeydown(e));
+    }
+
+    // ---- identity ----------------------------------------------------------
+    async chooseIdentity(empId) {
+      const sel = $("employee-switcher-select");
+      if (!empId) {                       // "sign out"
+        if (this.store.mode === "shared") await this.store.logout(); else storage.del("pulse_me");
+        this.me = "";
+        await this.refresh();
+        return;
+      }
+      if (this.store.mode === "local") {  // demo mode: no accounts, just a picker
+        storage.set("pulse_me", empId);
+        await this.refresh();
+        const emp = this.currentEmployee();
+        if (emp) this.toast(`Viewing as ${emp.name}.`, "success");
+        return;
+      }
+      sel.value = this.me;                // stay on the current user until the PIN is accepted
+      this.openAuth(empId);
+    }
+
+    openAuth(empId) {
+      const emp = C.getEmployee(this.state, empId);
+      if (!emp) return;
+      const claimed = this.view.claimed.includes(empId);
+      this.authTarget = empId;
+      $("auth-title").textContent = claimed ? `Sign in as ${emp.name}` : `Set up ${emp.name}'s profile`;
+      $("auth-help").textContent = claimed
+        ? "Enter your PIN."
+        : "Choose a PIN of 6 or more characters. Only you will be able to punch in and see your private leave notes with it.";
+      $("auth-confirm-group").hidden = claimed;
+      $("auth-pin").autocomplete = claimed ? "current-password" : "new-password";
+      $("auth-submit").textContent = claimed ? "Sign in" : "Save PIN and sign in";
+      $("auth-forgot").hidden = !claimed;
+      $("auth-forgot-cmd").textContent = `npm run reset-pin -- ${empId}`;
+      $("auth-form").reset();
+      $("auth-error").hidden = true;
+      this.openModal($("auth-modal"), $("auth-pin"));
+    }
+
+    async submitAuth(e) {
+      e.preventDefault();
+      const empId = this.authTarget;
+      const claimed = this.view.claimed.includes(empId);
+      const pin = $("auth-pin").value;
+      const err = $("auth-error");
+      const fail = msg => { err.textContent = msg; err.hidden = false; };
+      if (pin.length < 6) return fail("Use at least 6 characters.");
+      if (!claimed && pin !== $("auth-pin2").value) return fail("The two PINs do not match.");
+      $("auth-submit").disabled = true;
+      try {
+        const r = await this.store.login(empId, pin);
+        if (!r.ok) return fail(r.error || "Could not sign in.");
+        this.closeModal($("auth-modal"));
+        await this.refresh();
+        const emp = this.currentEmployee();
+        if (emp) this.toast(r.created ? `Welcome, ${emp.name}. Your PIN is saved.` : `Signed in as ${emp.name}.`, "success");
+      } catch (e2) {
+        fail("Could not reach the server.");
+      } finally {
+        $("auth-submit").disabled = false;
+        $("auth-form").reset();
+      }
     }
 
     showTab(name) {
@@ -534,7 +620,7 @@
       const sig = this.state.employees.map(e => e.id + e.name).join("|") + "#" + this.me;
       if (sig !== this.employeeSignature) {
         this.employeeSignature = sig;
-        sel.innerHTML = `<option value="">— Select yourself —</option>` +
+        sel.innerHTML = `<option value="">${this.me ? "— Sign out —" : "— Select yourself —"}</option>` +
           this.state.employees.map(e => `<option value="${esc(e.id)}"${e.id === this.me ? " selected" : ""}>${esc(e.name)} (${esc(e.department)})</option>`).join("");
       }
       sel.value = this.me;
@@ -802,7 +888,7 @@
         const private_ = this.view.mine[l.id];
         return `<div class="colleague-leave-row">
           <div>
-            <strong style="color:var(--text-heading);">${esc(l.type)} leave — ${l.days} working day${l.days === 1 ? "" : "s"}</strong>
+            <strong style="color:var(--text-heading);">${esc(l.type)} leave — ${esc(l.days)} working day${l.days === 1 ? "" : "s"}</strong>
             <div style="font-size:0.75rem; color:var(--text-muted);">${esc(l.start)} to ${esc(l.end)}${private_ && private_.reason ? ` • “${esc(private_.reason)}”` : ""}</div>
           </div>
           <span class="status-badge ${t.cls}">${esc(l.status)}</span>
@@ -856,7 +942,7 @@
           <td><span class="status-badge ${t.cls}">${t.icon} ${esc(l.type)}</span></td>
           <td class="mono-time">${esc(l.start)}</td>
           <td class="mono-time">${esc(l.end)}</td>
-          <td style="font-family:var(--font-mono); font-weight:700;">${l.days}</td>
+          <td style="font-family:var(--font-mono); font-weight:700;">${esc(l.days)}</td>
           <td>${details}</td>
           <td class="mono-time" style="color:var(--text-muted); font-size:0.78rem;">${esc(l.appliedOn)}</td>
           <td>${statusBadge}${cancellable ? ` <button type="button" class="link-btn" data-cancel-leave="${esc(l.id)}">Cancel</button>` : ""}</td>
@@ -896,7 +982,7 @@
           <img src="${emp ? avatarFor(emp) : ""}" alt="" class="feed-avatar" width="40" height="40">
           <div class="feed-body">
             <div class="feed-name">${esc(emp ? emp.name : l.empId)}</div>
-            <div class="feed-detail">${esc(l.start)} to ${esc(l.end)} (${l.days} working day${l.days === 1 ? "" : "s"})</div>
+            <div class="feed-detail">${esc(l.start)} to ${esc(l.end)} (${esc(l.days)} working day${l.days === 1 ? "" : "s"})</div>
           </div>
           <span class="feed-tag badge-holiday">${esc(when)}</span>
         </div>`;

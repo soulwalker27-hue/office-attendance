@@ -343,3 +343,32 @@ test("seed shows a lived-in office on a working day (some in, some not yet) but 
   const early = C.seedState(dawn, TZ);
   assert.equal(early.attendance.filter(r => r.date === "2026-10-26").length, 0);
 });
+
+test("hostile input cannot reach Object.prototype members or crash validation", () => {
+  const s = office();
+  for (const leaveType of ["constructor", "__proto__", "toString", "hasOwnProperty", 5, null, undefined, {}, []]) {
+    const r = act(s, { type: "leave", empId: "EMP-101", leaveType, start: "2026-11-02", end: "2026-11-02", reason: "abc" });
+    assert.equal(r.ok, false, String(leaveType));
+  }
+  assert.equal(act(s, { type: "leave", empId: "EMP-101", leaveType: "Holiday", start: { a: 1 }, end: [], reason: "abc" }).ok, false);
+  assert.equal(s.leaves.length, 0);
+});
+
+test("abuse caps: punches per day, breaks per session, leaves per employee", () => {
+  const s = office();
+  let t = MON_0930;
+  for (let i = 0; i < 20; i++) {
+    assert.equal(act(s, { type: "checkin", empId: "EMP-101" }, t).ok, true, "check-in " + i);
+    t += MIN;
+    assert.equal(act(s, { type: "checkout", empId: "EMP-101" }, t).ok, true);
+    t += MIN;
+  }
+  assert.equal(act(s, { type: "checkin", empId: "EMP-101" }, t).code, "TOO_MANY");
+
+  const s2 = office();
+  act(s2, { type: "checkin", empId: "EMP-101" });
+  let r;
+  for (let i = 0; i < 101; i++) r = act(s2, { type: "break", empId: "EMP-101" }, MON_0930 + (i + 1) * MIN);
+  assert.equal(s2.attendance[0].breaks.length, 50);
+  assert.equal(r.code, "TOO_MANY"); // the 101st toggle would open break #51
+});

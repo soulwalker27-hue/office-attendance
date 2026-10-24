@@ -25,6 +25,9 @@
   const WORK_MODES = ["Office", "Remote"];
   const MAX_LEAVE_SPAN_DAYS = 90;
   const MAX_EMPLOYEES = 500;
+const MAX_PUNCHES_PER_DAY = 20;
+const MAX_BREAKS_PER_SESSION = 50;
+const MAX_LEAVES_PER_EMPLOYEE = 200;
 
   // Official office closures (India). `date` is ISO; weekday/status are always derived.
   // Only dates fixed by the calendar or widely agreed are listed. Moon-dependent festival
@@ -342,7 +345,7 @@
   function validateLeave(state, input, now, tz) {
     const emp = getEmployee(state, input.empId);
     if (!emp) return fail("NO_EMPLOYEE", "Unknown employee.");
-    const meta = LEAVE_TYPES[input.type];
+    const meta = Object.prototype.hasOwnProperty.call(LEAVE_TYPES, input.type) ? LEAVE_TYPES[input.type] : null;
     if (!meta) return fail("BAD_TYPE", "Choose Medical, Emergency or Holiday.");
     if (!parseDate(input.start) || !parseDate(input.end)) return fail("BAD_DATE", "Enter valid start and end dates.");
     if (input.start > input.end) return fail("BAD_RANGE", "End date must be on or after the start date.");
@@ -394,6 +397,9 @@
     const today = dateKey(now, tz);
     const open = openSession(state, emp.id);
     if (open && open.date === today) return fail("ALREADY_IN", "You are already checked in.");
+    if (state.attendance.filter(r => r.empId === emp.id && r.date === today).length >= MAX_PUNCHES_PER_DAY) {
+      return fail("TOO_MANY", `At most ${MAX_PUNCHES_PER_DAY} check-ins are recorded per day.`);
+    }
     const leave = leaveOn(state, emp.id, today);
     if (leave && !a.override) {
       return fail("LEAVE_CONFLICT", `You are on approved ${leave.type} leave today. Check in anyway?`);
@@ -431,6 +437,7 @@
       running.end = Math.max(now, running.start);
       return ok({ message: "Welcome back — break ended.", onBreak: false });
     }
+    if (open.breaks.length >= MAX_BREAKS_PER_SESSION) return fail("TOO_MANY", "Too many breaks in one session.");
     open.breaks.push({ start: now, end: null });
     return ok({ message: "Break started.", onBreak: true });
   }
@@ -444,6 +451,9 @@
     if (reason.length < 3) return fail("NO_REASON", "Please give a short reason (at least 3 characters).");
     const check = validateLeave(state, input, now, tz);
     if (!check.ok) return check;
+    if (state.leaves.filter(l => l.empId === a.empId).length >= MAX_LEAVES_PER_EMPLOYEE) {
+      return fail("TOO_MANY", "Leave history limit reached for this employee.");
+    }
     state.leaves.unshift({
       id: genId("LR", now), empId: a.empId, type: a.leaveType, start: a.start, end: a.end,
       days: check.days, reason, contact, status: "Approved",
