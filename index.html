@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulseAttend | Enterprise Office Attendance & Leave Tracking</title>
+  <meta name="description" content="Modern enterprise employee attendance tracking system with live check-in/out, team visibility, medical & emergency leave tracking, and holiday calendar.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Top Navigation Bar -->
+    <header class="app-header">
+      <div class="header-container">
+        <div class="brand-group">
+          <div class="brand-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+            <span class="live-pulse-dot"></span>
+          </div>
+          <div class="brand-text">
+            <div class="brand-title">Pulse<span class="brand-highlight">Attend</span></div>
+            <div class="brand-subtitle">Office Attendance & Leave Portal</div>
+          </div>
+        </div>
+
+        <!-- Global Header Controls -->
+        <div class="header-controls">
+          <div class="live-status-pill" id="global-date-pill">
+            <span class="clock-icon">🕒</span>
+            <span id="header-live-clock">--:--:--</span>
+            <span class="divider">|</span>
+            <span id="header-live-date">Loading...</span>
+          </div>
+
+          <!-- Employee Profile Switcher (Simulate Any Colleague) -->
+          <div class="user-switcher-container">
+            <label for="employee-switcher-select" class="switcher-label">Acting As:</label>
+            <div class="custom-select-wrapper">
+              <select id="employee-switcher-select" class="employee-dropdown" aria-label="Switch logged-in employee">
+                <!-- Populated dynamically via JS -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Theme Toggle Switcher (Minimalist Light Blue / Dark Mode) -->
+          <button id="theme-toggle-btn" class="theme-toggle-btn" title="Toggle Theme (Minimalist Light Blue / Dark Mode)" aria-label="Toggle Theme">
+            <span id="theme-icon">🌙</span>
+            <span id="theme-label" class="theme-label">Dark Mode</span>
+          </button>
+
+          <!-- Sound & Data Actions -->
+          <button id="sound-toggle-btn" class="icon-action-btn" title="Toggle audio feedback" aria-label="Toggle Sound">
+            <span id="sound-icon">🔊</span>
+          </button>
+
+          <button id="btn-run-diagnostics" class="secondary-btn btn-sm" title="Run Automated QA Self-Test">
+            <span>🧪 Test Suite</span>
+          </button>
+
+          <button id="reset-data-btn" class="secondary-btn btn-sm" title="Reset to default mock dataset">
+            <span>↺ Reset Demo</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="app-nav">
+        <div class="nav-container">
+          <button class="nav-tab active" data-tab="my-desk" id="tab-btn-my-desk">
+            <span class="tab-icon">⚡</span>
+            <span>My Attendance & Punch</span>
+          </button>
+          <button class="nav-tab" data-tab="team-directory" id="tab-btn-team-directory">
+            <span class="tab-icon">👥</span>
+            <span>Team Live Board</span>
+            <span class="badge-count" id="active-in-office-count">0</span>
+          </button>
+          <button class="nav-tab" data-tab="leave-tracker" id="tab-btn-leave-tracker">
+            <span class="tab-icon">📋</span>
+            <span>Leave Management</span>
+          </button>
+          <button class="nav-tab" data-tab="holiday-calendar" id="tab-btn-holiday-calendar">
+            <span class="tab-icon">🏖️</span>
+            <span>Holidays & Company Calendar</span>
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Quick Metric Summary Cards -->
+      <section class="summary-metrics-grid">
+        <div class="metric-card card-gradient-emerald">
+          <div class="metric-icon-box">🏢</div>
+          <div class="metric-body">
+            <span class="metric-title">Team Present Today</span>
+            <div class="metric-value-row">
+              <span class="metric-val" id="metric-present-count">0</span>
+              <span class="metric-sub" id="metric-present-total">/ 0 active</span>
+            </div>
+            <span class="metric-footnote" id="metric-present-percent">0% presence rate</span>
+          </div>
+        </div>
+
+        <div class="metric-card card-gradient-amber">
+          <div class="metric-icon-box">🩺</div>
+          <div class="metric-body">
+            <span class="metric-title">Medical Leave Today</span>
+            <div class="metric-value-row">
+              <span class="metric-val" id="metric-medical-count">0</span>
+              <span class="metric-sub">colleagues</span>
+            </div>
+            <span class="metric-footnote">Covered by health policy</span>
+          </div>
+        </div>
+
+        <div class="metric-card card-gradient-rose">
+          <div class="metric-icon-box">🚨</div>
+          <div class="metric-body">
+            <span class="metric-title">Emergency Leave</span>
+            <div class="metric-value-row">
+              <span class="metric-val" id="metric-emergency-count">0</span>
+              <span class="metric-sub">urgent absences</span>
+            </div>
+            <span class="metric-footnote">Urgent response notified</span>
+          </div>
+        </div>
+
+        <div class="metric-card card-gradient-cyan">
+          <div class="metric-icon-box">🌴</div>
+          <div class="metric-body">
+            <span class="metric-title">Holidays & Vacations</span>
+            <div class="metric-value-row">
+              <span class="metric-val" id="metric-holiday-count">0</span>
+              <span class="metric-sub">on approved break</span>
+            </div>
+            <span class="metric-footnote">Next company holiday in 6 days</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 1: MY ATTENDANCE & PUNCH DESK -->
+      <section class="tab-panel active" id="tab-my-desk">
+        <div class="desk-grid">
+          <!-- Left Column: Live Punch Station -->
+          <div class="glass-card punch-station-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <span class="card-badge">Daily Time Clock</span>
+                <h2>Self Check-In & Check-Out</h2>
+              </div>
+              <div class="current-user-tag">
+                <img id="current-user-avatar" src="" alt="Avatar" class="avatar-sm">
+                <div>
+                  <div class="user-tag-name" id="current-user-name">Employee Name</div>
+                  <div class="user-tag-role" id="current-user-role">Role & Department</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Big Digital Timepiece -->
+            <div class="timepiece-container">
+              <div class="digital-clock" id="punch-live-clock">00:00:00</div>
+              <div class="digital-date" id="punch-live-date">Monday, October 24, 2026</div>
+              <div class="digital-timezone">Standard Office Time (UTC+05:30) • HQ Metro Campus</div>
+            </div>
+
+            <!-- Status Banner & Session Timer -->
+            <div class="punch-status-bar" id="punch-status-bar">
+              <div class="status-indicator-dot" id="punch-status-dot"></div>
+              <div class="status-indicator-text">
+                <span class="status-label">Current Status:</span>
+                <strong id="punch-status-text">Not Checked In</strong>
+              </div>
+              <div class="session-timer-box" id="session-timer-box">
+                <span class="timer-label">Session Duration:</span>
+                <span class="timer-value" id="punch-session-duration">00h 00m 00s</span>
+              </div>
+            </div>
+
+            <!-- Mode Selector (In Office vs Remote) -->
+            <div class="work-mode-selector">
+              <label class="mode-label">Punch Location Mode:</label>
+              <div class="mode-options">
+                <label class="mode-radio">
+                  <input type="radio" name="workMode" value="Office" id="mode-office" checked>
+                  <span class="radio-custom">🏢 In-Office (Desk Floor 3)</span>
+                </label>
+                <label class="mode-radio">
+                  <input type="radio" name="workMode" value="Remote" id="mode-remote">
+                  <span class="radio-custom">🏡 Work From Home / Remote</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Primary Action Buttons -->
+            <div class="punch-action-buttons">
+              <button id="btn-check-in" class="punch-btn btn-check-in">
+                <span class="btn-icon">▶</span>
+                <span class="btn-label">Punch Check-In</span>
+                <span class="btn-subtext">Record Entry Time</span>
+              </button>
+              <button id="btn-check-out" class="punch-btn btn-check-out" disabled>
+                <span class="btn-icon">⏹</span>
+                <span class="btn-label">Punch Check-Out</span>
+                <span class="btn-subtext">Complete Work Day</span>
+              </button>
+            </div>
+
+            <!-- Auxiliary Controls (Breaks & Quick Actions) -->
+            <div class="punch-aux-controls">
+              <button id="btn-break-toggle" class="aux-btn" disabled>
+                <span id="break-btn-icon">☕</span>
+                <span id="break-btn-text">Take Break (Lunch / Coffee)</span>
+              </button>
+              <button id="btn-quick-apply-leave" class="aux-btn aux-btn-leave">
+                <span>📝 Request Leave</span>
+              </button>
+            </div>
+
+            <!-- Today's Punch Summary Details -->
+            <div class="today-punch-metrics">
+              <div class="punch-metric-item">
+                <span class="item-label">Entry Time</span>
+                <span class="item-val" id="today-entry-time">--:--</span>
+              </div>
+              <div class="punch-metric-item">
+                <span class="item-label">Exit Time</span>
+                <span class="item-val" id="today-exit-time">--:--</span>
+              </div>
+              <div class="punch-metric-item">
+                <span class="item-label">Total Work Hours</span>
+                <span class="item-val text-emerald" id="today-total-hours">0h 0m</span>
+              </div>
+              <div class="punch-metric-item">
+                <span class="item-label">Break Time</span>
+                <span class="item-val text-amber" id="today-break-duration">0m</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Personal Monthly Attendance Log & Leave Balances -->
+          <div class="desk-side-column">
+            <!-- Leave Balance Overview Mini Card -->
+            <div class="glass-card leave-balances-card">
+              <div class="card-header-compact">
+                <h3>My Leave Quota & Allowances</h3>
+                <button class="link-btn" id="link-view-all-leaves">Full History →</button>
+              </div>
+              <div class="balance-bars-list">
+                <!-- Paid Holidays -->
+                <div class="balance-item">
+                  <div class="balance-info">
+                    <span class="balance-title">🏖️ Annual Paid Holidays</span>
+                    <span class="balance-ratio" id="user-holiday-ratio">0 / 12 Days Taken</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill fill-cyan" id="user-holiday-progress" style="width: 0%;"></div>
+                  </div>
+                  <span class="balance-remaining" id="user-holiday-remaining">12 days available</span>
+                </div>
+
+                <!-- Medical Leave -->
+                <div class="balance-item">
+                  <div class="balance-info">
+                    <span class="balance-title">🩺 Medical Leave</span>
+                    <span class="balance-ratio" id="user-medical-ratio">0 / 14 Days Taken</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill fill-amber" id="user-medical-progress" style="width: 0%;"></div>
+                  </div>
+                  <span class="balance-remaining" id="user-medical-remaining">14 days available</span>
+                </div>
+
+                <!-- Emergency Leave -->
+                <div class="balance-item">
+                  <div class="balance-info">
+                    <span class="balance-title">🚨 Emergency Leave</span>
+                    <span class="balance-ratio" id="user-emergency-ratio">0 / 7 Days Taken</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill fill-rose" id="user-emergency-progress" style="width: 0%;"></div>
+                  </div>
+                  <span class="balance-remaining" id="user-emergency-remaining">7 days available</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recent Attendance History Table -->
+            <div class="glass-card history-card">
+              <div class="card-header-compact">
+                <h3>My Recent Punch Logs</h3>
+                <span class="sub-pill">Last 7 Days</span>
+              </div>
+              <div class="table-responsive">
+                <table class="data-table" id="my-punch-history-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Check-In</th>
+                      <th>Check-Out</th>
+                      <th>Hours</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="my-punch-history-tbody">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: TEAM ATTENDANCE DIRECTORY ("WHO'S IN TODAY") -->
+      <section class="tab-panel" id="tab-team-directory">
+        <div class="glass-card team-directory-card">
+          <div class="directory-toolbar">
+            <div class="directory-title-block">
+              <h2>Team Live Attendance Directory</h2>
+              <p class="directory-description">
+                Real-time visibility into all employees' check-in status, punch times, and leaves. Click any coworker to view their full timesheet and leave breakdown.
+              </p>
+            </div>
+
+            <!-- Search and Filter Bar -->
+            <div class="directory-filters">
+              <div class="search-input-wrapper">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="directory-search-input" placeholder="Search colleague by name, role or dept..." class="search-field">
+              </div>
+
+              <!-- Department Filter -->
+              <select id="department-filter" class="filter-select" aria-label="Filter by department">
+                <option value="ALL">All Departments</option>
+                <option value="Engineering">Engineering</option>
+                <option value="Design">Product Design</option>
+                <option value="Marketing">Marketing</option>
+                <option value="Human Resources">Human Resources</option>
+                <option value="Sales & Ops">Sales & Ops</option>
+                <option value="Product">Product Management</option>
+              </select>
+
+              <!-- Status Filter -->
+              <select id="status-filter" class="filter-select" aria-label="Filter by attendance status">
+                <option value="ALL">All Statuses</option>
+                <option value="CHECKED_IN">🟢 In Office / Checked In</option>
+                <option value="REMOTE">🏡 Remote Checked In</option>
+                <option value="MEDICAL_LEAVE">🩺 Medical Leave</option>
+                <option value="EMERGENCY_LEAVE">🚨 Emergency Leave</option>
+                <option value="HOLIDAY">🏖️ On Holiday</option>
+                <option value="CHECKED_OUT">🔴 Checked Out</option>
+                <option value="NOT_CHECKED_IN">⚪ Not Checked In</option>
+              </select>
+
+              <button id="btn-export-attendance" class="secondary-btn">
+                <span>📥 Export CSV</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Directory Table View -->
+          <div class="table-responsive">
+            <table class="data-table directory-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Department & Role</th>
+                  <th>Today's Status</th>
+                  <th>Check-In Time</th>
+                  <th>Check-Out Time</th>
+                  <th>Total Duration</th>
+                  <th>Active Leave Type</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="team-directory-tbody">
+                <!-- Dynamically generated with colleague rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: LEAVE MANAGEMENT & BALANCES -->
+      <section class="tab-panel" id="tab-leave-tracker">
+        <div class="leaves-layout">
+          <!-- Top Row: Leave Category Cards -->
+          <div class="leave-categories-grid">
+            <!-- Medical Leave Card -->
+            <div class="leave-hero-card medical-hero">
+              <div class="hero-top">
+                <div class="hero-icon">🩺</div>
+                <span class="hero-badge badge-amber">Health & Wellness</span>
+              </div>
+              <h3 class="hero-title">Medical Leave</h3>
+              <p class="hero-desc">Covered for illness, doctor visits, and recovery periods with statutory medical support.</p>
+              <div class="hero-stats">
+                <div class="hero-stat-box">
+                  <span class="stat-number" id="card-medical-allocated">14</span>
+                  <span class="stat-label">Total Quota</span>
+                </div>
+                <div class="hero-stat-box">
+                  <span class="stat-number text-amber" id="card-medical-used">0</span>
+                  <span class="stat-label">Days Used</span>
+                </div>
+                <div class="hero-stat-box">
+                  <span class="stat-number text-emerald" id="card-medical-available">14</span>
+                  <span class="stat-label">Available</span>
+                </div>
+              </div>
+              <button class="primary-btn btn-apply-specific" data-type="Medical">
+                <span>+ Apply Medical Leave</span>
+              </button>
+            </div>
+
+            <!-- Emergency Leave Card -->
+            <div class="leave-hero-card emergency-hero">
+              <div class="hero-top">
+                <div class="hero-icon">🚨</div>
+                <span class="hero-badge badge-rose">Urgent Situations</span>
+              </div>
+              <h3 class="hero-title">Emergency Leave</h3>
+              <p class="hero-desc">Immediate unforeseen personal, family, or critical domestic emergencies.</p>
+              <div class="hero-stats">
+                <div class="hero-stat-box">
+                  <span class="stat-number" id="card-emergency-allocated">7</span>
+                  <span class="stat-label">Total Quota</span>
+                </div>
+                <div class="hero-stat-box">
+                  <span class="stat-number text-rose" id="card-emergency-used">0</span>
+                  <span class="stat-label">Days Used</span>
+                </div>
+                <div class="hero-stat-box">
+                  <span class="stat-number text-emerald" id="card-emergency-available">7</span>
+                  <span class="stat-label">Available</span>
+                </div>
+              </div>
+              <button class="primary-btn btn-apply-specific" data-type="Emergency">
+                <span>+ Apply Emergency Leave</span>
+              </button>
+            </div>
+
+            <!-- Holiday / Vacation Card -->
+            <div class="leave-hero-card holiday-hero">
+              <div class="hero-top">
+                <div class="hero-icon">🏖️</div>
+                <span class="hero-badge badge-cyan">Planned Time Off</span>
+              </div>
+              <h3 class="hero-title">Paid Vacation & Holidays</h3>
+              <p class="hero-desc">Annual paid holidays, rest days, travel, and personal planned leisure time off.</p>
+              <div class="hero-stats">
+                <div class="hero-stat-box">
+                  <span class="stat-number" id="card-holiday-allocated">12</span>
+                  <span class="stat-label">Total Quota</span>
+                </div>
+                <div class="hero-stat-box">
+                  <span class="stat-number text-cyan" id="card-holiday-used">0</span>
+                  <span class="stat-label">Days Used</span>
+                </div>
+                <div class="hero-stat-box">
+                  <span class="stat-number text-emerald" id="card-holiday-available">12</span>
+                  <span class="stat-label">Available</span>
+                </div>
+              </div>
+              <button class="primary-btn btn-apply-specific" data-type="Holiday">
+                <span>+ Apply Holiday Leave</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Bottom: All Leave Applications Table -->
+          <div class="glass-card leave-history-card">
+            <div class="card-header">
+              <div>
+                <h2>Company Leave Log & Recent Requests</h2>
+                <p class="section-subtext">View all recorded leaves across team members including medical, emergency, and holidays.</p>
+              </div>
+              <div class="leave-table-filter">
+                <button class="filter-chip active" data-leave-filter="ALL">All Records</button>
+                <button class="filter-chip" data-leave-filter="Medical">Medical 🩺</button>
+                <button class="filter-chip" data-leave-filter="Emergency">Emergency 🚨</button>
+                <button class="filter-chip" data-leave-filter="Holiday">Holidays 🏖️</button>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Leave Type</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th>Days</th>
+                    <th>Reason / Details</th>
+                    <th>Applied On</th>
+                    <th>Approval Status</th>
+                  </tr>
+                </thead>
+                <tbody id="all-leaves-tbody">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: HOLIDAYS & COMPANY CALENDAR -->
+      <section class="tab-panel" id="tab-holiday-calendar">
+        <div class="holiday-calendar-grid">
+          <!-- Official Public Holidays List -->
+          <div class="glass-card public-holidays-card">
+            <div class="card-header">
+              <div>
+                <span class="card-badge">Official Calendar</span>
+                <h2>Official Office Holidays (2026)</h2>
+              </div>
+              <span class="sub-pill">10 Paid Public Holidays</span>
+            </div>
+            <div class="holidays-list" id="public-holidays-list">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- Company Upcoming Approved Vacations & Holidays Feed -->
+          <div class="glass-card team-vacations-card">
+            <div class="card-header">
+              <div>
+                <span class="card-badge">Team Visibility</span>
+                <h2>Upcoming Colleague Vacations</h2>
+              </div>
+              <button class="primary-btn btn-sm" id="btn-plan-holiday-btn">+ Plan My Holiday</button>
+            </div>
+            <p class="section-subtext">Check ahead to see which team members are taking holidays or leave soon to avoid coverage conflicts.</p>
+            <div class="upcoming-feed" id="team-vacations-feed">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <div class="footer-left">
+          <span>PulseAttend v2.4 • Office Operations Management System</span>
+          <span class="divider">|</span>
+          <span class="text-muted">Data synchronized locally and shared across session views</span>
+        </div>
+        <div class="footer-right">
+          <span class="badge-tag">🔒 SSL Encrypted</span>
+          <span class="badge-tag">⚡ Live Telemetry</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- MODAL 1: APPLY FOR LEAVE MODAL -->
+  <div class="modal-backdrop" id="leave-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon-badge" id="modal-icon-badge">📝</span>
+          <div>
+            <h3 id="modal-title">Submit Leave Request</h3>
+            <p class="modal-sub">Deducts from your official balance upon submission</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="modal-close-btn" aria-label="Close modal">&times;</button>
+      </div>
+
+      <form id="leave-application-form" class="modal-form">
+        <!-- Applying Employee Display -->
+        <div class="form-group">
+          <label class="form-label">Applying Employee</label>
+          <div class="form-static-user" id="modal-applicant-display">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- Leave Type Choice -->
+        <div class="form-group">
+          <label for="leave-type-select" class="form-label">Leave Category <span class="required">*</span></label>
+          <select id="leave-type-select" class="form-control" required>
+            <option value="Medical">🩺 Medical Leave (Quota: 14 Days)</option>
+            <option value="Emergency">🚨 Emergency Leave (Quota: 7 Days)</option>
+            <option value="Holiday">🏖️ Paid Holiday / Vacation (Quota: 12 Days)</option>
+          </select>
+        </div>
+
+        <!-- Date Range Grid -->
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="leave-start-date" class="form-label">Start Date <span class="required">*</span></label>
+            <input type="date" id="leave-start-date" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label for="leave-end-date" class="form-label">End Date <span class="required">*</span></label>
+            <input type="date" id="leave-end-date" class="form-control" required>
+          </div>
+        </div>
+
+        <!-- Calculated Days Preview -->
+        <div class="days-calculated-banner" id="days-calculated-banner">
+          <span>Requested Duration:</span>
+          <strong id="modal-calculated-days">1 Day</strong>
+          <span class="balance-check-text" id="modal-balance-check">(Within your remaining quota)</span>
+        </div>
+
+        <!-- Reason Input -->
+        <div class="form-group">
+          <label for="leave-reason" class="form-label">Reason / Notes <span class="required">*</span></label>
+          <textarea id="leave-reason" class="form-control" rows="3" placeholder="Provide details (e.g. Severe flu & fever, Family urgent medical visit, Annual trip to Hawaii)..." required></textarea>
+        </div>
+
+        <!-- Emergency / Medical Specific Details (Dynamic) -->
+        <div class="form-group" id="extra-contact-group">
+          <label for="leave-contact" class="form-label">Emergency Phone / Doctor Hospital Note (Optional)</label>
+          <input type="text" id="leave-contact" class="form-control" placeholder="+1 (555) 234-5678 or Dr. Miller St. Jude Clinic">
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="secondary-btn" id="modal-cancel-btn">Cancel</button>
+          <button type="submit" class="primary-btn" id="modal-submit-btn">
+            <span>Confirm & Submit Leave</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 2: COLLEAGUE PROFILE & ATTENDANCE INSPECTOR -->
+  <div class="modal-backdrop" id="colleague-modal" role="dialog" aria-modal="true" aria-labelledby="colleague-modal-title">
+    <div class="modal-card modal-card-lg">
+      <div class="modal-header">
+        <div class="colleague-profile-header">
+          <img id="colleague-avatar" src="" alt="Avatar" class="avatar-lg">
+          <div>
+            <div class="colleague-badge-row">
+              <h3 id="colleague-modal-title">Colleague Name</h3>
+              <span class="status-badge" id="colleague-status-badge">Status</span>
+            </div>
+            <p id="colleague-role-dept" class="colleague-role-text">Role • Department</p>
+            <p id="colleague-email" class="colleague-email-text">email@office.com</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="colleague-modal-close" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="colleague-modal-body">
+        <!-- Today's Timesheet Overview -->
+        <div class="colleague-stats-grid">
+          <div class="mini-stat-card">
+            <span class="mini-label">Today's Check-In</span>
+            <span class="mini-val" id="colleague-checkin-time">--:--</span>
+          </div>
+          <div class="mini-stat-card">
+            <span class="mini-label">Today's Check-Out</span>
+            <span class="mini-val" id="colleague-checkout-time">--:--</span>
+          </div>
+          <div class="mini-stat-card">
+            <span class="mini-label">Work Duration Today</span>
+            <span class="mini-val text-emerald" id="colleague-total-duration">--</span>
+          </div>
+          <div class="mini-stat-card">
+            <span class="mini-label">Punch Location</span>
+            <span class="mini-val" id="colleague-work-mode">--</span>
+          </div>
+        </div>
+
+        <!-- Leave Records Breakdown for this Colleague -->
+        <div class="colleague-leave-summary">
+          <h4>Leave Allowances & Records</h4>
+          <div class="colleague-leave-chips">
+            <div class="chip-item">
+              <span class="chip-title">🏖️ Holidays Took:</span>
+              <strong id="colleague-holidays-took">0 / 12 Days</strong>
+            </div>
+            <div class="chip-item">
+              <span class="chip-title">🩺 Medical Leaves:</span>
+              <strong id="colleague-medical-took">0 / 14 Days</strong>
+            </div>
+            <div class="chip-item">
+              <span class="chip-title">🚨 Emergency Leaves:</span>
+              <strong id="colleague-emergency-took">0 / 7 Days</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Attendance Punch History Table for this Colleague -->
+        <div class="colleague-history-section">
+          <h4>Recent 5-Day Attendance Log</h4>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Check-In</th>
+                  <th>Check-Out</th>
+                  <th>Hours Worked</th>
+                  <th>Mode / Status</th>
+                </tr>
+              </thead>
+              <tbody id="colleague-history-tbody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Active or Recent Leave Requests -->
+        <div class="colleague-leave-requests-section">
+          <h4>Leave History & Applications</h4>
+          <div id="colleague-leaves-list" class="colleague-leaves-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary-btn" id="colleague-modal-close-btn">Close Profile</button>
+        <button class="primary-btn" id="colleague-act-as-btn">
+          <span>Switch To This User 👤</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: QA DIAGNOSTICS & SYSTEM AUDIT TEST RUNNER -->
+  <div class="modal-backdrop" id="diagnostics-modal" role="dialog" aria-modal="true" aria-labelledby="diagnostics-title">
+    <div class="modal-card modal-card-lg">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon-badge">🧪</span>
+          <div>
+            <h3 id="diagnostics-title">Automated QA &amp; Invariant Test Harness</h3>
+            <p class="modal-sub">Live independent test oracle running assertions against attendance, leave accounting, and security invariants</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="diagnostics-modal-close" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="colleague-modal-body" id="diagnostics-modal-body">
+        <!-- Live Test Results Populated Dynamically -->
+      </div>
+      <div class="modal-footer">
+        <button class="secondary-btn" id="diagnostics-modal-close-btn">Close</button>
+        <button class="primary-btn" id="diagnostics-rerun-btn">
+          <span>Rerun All Tests ↺</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Main JavaScript Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

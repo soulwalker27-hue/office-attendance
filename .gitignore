@@ -1,0 +1,12 @@
+# IDE and session metadata
+*.json
+!.vscode/launch.json
+
+# Operating System files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Temporary scratch and logs
+*.log
+scratch/
