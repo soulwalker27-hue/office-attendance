@@ -25,29 +25,29 @@
   const WORK_MODES = ["Office", "Remote"];
   const MAX_LEAVE_SPAN_DAYS = 90;
   const MAX_EMPLOYEES = 500;
+const MAX_PUNCHES_PER_DAY = 20;
+const MAX_BREAKS_PER_SESSION = 50;
+const MAX_LEAVES_PER_EMPLOYEE = 200;
 
-  // Official office closures. `date` is ISO; weekday/status are always derived.
+  // Official office closures (India). `date` is ISO; weekday/status are always derived.
+  // Only dates fixed by the calendar or widely agreed are listed. Moon-dependent festival
+  // dates (Eid, Muharram, and some Holi/Diwali/Dussehra dates) differ by source and state,
+  // so HR should confirm them against the DoPT/office notification and add them here.
   const PUBLIC_HOLIDAYS = [
-    { date: "2026-01-01", name: "New Year's Day" },
-    { date: "2026-01-19", name: "Martin Luther King Jr. Day" },
-    { date: "2026-02-16", name: "Presidents' Day" },
-    { date: "2026-05-25", name: "Memorial Day" },
-    { date: "2026-06-19", name: "Juneteenth National Freedom Day" },
-    { date: "2026-07-03", name: "Independence Day (observed)" },
-    { date: "2026-09-07", name: "Labor Day" },
-    { date: "2026-11-11", name: "Veterans Day" },
-    { date: "2026-11-26", name: "Thanksgiving Day" },
+    { date: "2026-01-26", name: "Republic Day" },
+    { date: "2026-03-04", name: "Holi" },
+    { date: "2026-04-03", name: "Good Friday" },
+    { date: "2026-08-15", name: "Independence Day" },
+    { date: "2026-09-04", name: "Janmashtami" },
+    { date: "2026-10-02", name: "Gandhi Jayanti" },
+    { date: "2026-10-20", name: "Dussehra" },
+    { date: "2026-11-08", name: "Diwali" },
     { date: "2026-12-25", name: "Christmas Day" },
-    { date: "2027-01-01", name: "New Year's Day" },
-    { date: "2027-01-18", name: "Martin Luther King Jr. Day" },
-    { date: "2027-02-15", name: "Presidents' Day" },
-    { date: "2027-05-31", name: "Memorial Day" },
-    { date: "2027-06-18", name: "Juneteenth (observed)" },
-    { date: "2027-07-05", name: "Independence Day (observed)" },
-    { date: "2027-09-06", name: "Labor Day" },
-    { date: "2027-11-11", name: "Veterans Day" },
-    { date: "2027-11-25", name: "Thanksgiving Day" },
-    { date: "2027-12-24", name: "Christmas Day (observed)" }
+    { date: "2027-01-26", name: "Republic Day" },
+    { date: "2027-03-26", name: "Good Friday" },
+    { date: "2027-08-15", name: "Independence Day" },
+    { date: "2027-10-02", name: "Gandhi Jayanti" },
+    { date: "2027-12-25", name: "Christmas Day" }
   ];
   const HOLIDAY_BY_DATE = new Map(PUBLIC_HOLIDAYS.map(h => [h.date, h.name]));
 
@@ -345,7 +345,7 @@
   function validateLeave(state, input, now, tz) {
     const emp = getEmployee(state, input.empId);
     if (!emp) return fail("NO_EMPLOYEE", "Unknown employee.");
-    const meta = LEAVE_TYPES[input.type];
+    const meta = Object.prototype.hasOwnProperty.call(LEAVE_TYPES, input.type) ? LEAVE_TYPES[input.type] : null;
     if (!meta) return fail("BAD_TYPE", "Choose Medical, Emergency or Holiday.");
     if (!parseDate(input.start) || !parseDate(input.end)) return fail("BAD_DATE", "Enter valid start and end dates.");
     if (input.start > input.end) return fail("BAD_RANGE", "End date must be on or after the start date.");
@@ -397,6 +397,9 @@
     const today = dateKey(now, tz);
     const open = openSession(state, emp.id);
     if (open && open.date === today) return fail("ALREADY_IN", "You are already checked in.");
+    if (state.attendance.filter(r => r.empId === emp.id && r.date === today).length >= MAX_PUNCHES_PER_DAY) {
+      return fail("TOO_MANY", `At most ${MAX_PUNCHES_PER_DAY} check-ins are recorded per day.`);
+    }
     const leave = leaveOn(state, emp.id, today);
     if (leave && !a.override) {
       return fail("LEAVE_CONFLICT", `You are on approved ${leave.type} leave today. Check in anyway?`);
@@ -434,6 +437,7 @@
       running.end = Math.max(now, running.start);
       return ok({ message: "Welcome back — break ended.", onBreak: false });
     }
+    if (open.breaks.length >= MAX_BREAKS_PER_SESSION) return fail("TOO_MANY", "Too many breaks in one session.");
     open.breaks.push({ start: now, end: null });
     return ok({ message: "Break started.", onBreak: true });
   }
@@ -447,6 +451,9 @@
     if (reason.length < 3) return fail("NO_REASON", "Please give a short reason (at least 3 characters).");
     const check = validateLeave(state, input, now, tz);
     if (!check.ok) return check;
+    if (state.leaves.filter(l => l.empId === a.empId).length >= MAX_LEAVES_PER_EMPLOYEE) {
+      return fail("TOO_MANY", "Leave history limit reached for this employee.");
+    }
     state.leaves.unshift({
       id: genId("LR", now), empId: a.empId, type: a.leaveType, start: a.start, end: a.end,
       days: check.days, reason, contact, status: "Approved",
@@ -523,20 +530,23 @@
   function seedState(now, tz) {
     const state = emptyState();
     const people = [
-      ["Alex Morgan", "Senior Fullstack Engineer", "Engineering"],
-      ["Sarah Jenkins", "Lead Product Designer", "Design"],
-      ["Michael Chen", "HR Operations Lead", "Human Resources"],
-      ["Elena Rostova", "Cloud DevOps Architect", "Engineering"],
-      ["David Kim", "Senior Growth Marketing Manager", "Marketing"],
-      ["Priya Patel", "VP of Product Strategy", "Product"],
-      ["James O'Connor", "Operations & Logistics Manager", "Sales & Ops"],
-      ["Sophia Hernandez", "Enterprise Support Specialist", "Sales & Ops"]
+      ["Aarav Sharma", "Senior Full-stack Engineer", "Engineering"],
+      ["Ananya Iyer", "Lead Product Designer", "Design"],
+      ["Rohan Mehta", "HR Operations Lead", "Human Resources"],
+      ["Priya Nair", "Cloud DevOps Architect", "Engineering"],
+      ["Vikram Singh", "Senior Growth Marketing Manager", "Marketing"],
+      ["Neha Kulkarni", "VP of Product Strategy", "Product"],
+      ["Arjun Reddy", "Operations & Logistics Manager", "Sales & Ops"],
+      ["Kavya Menon", "Enterprise Support Specialist", "Sales & Ops"],
+      ["Imran Qureshi", "QA Engineer", "Engineering"],
+      ["Sneha Banerjee", "Content Strategist", "Marketing"]
     ];
     people.forEach(([name, role, department], i) => {
-      const first = name.split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
+      const [first, last] = name.toLowerCase().split(" ");
       state.employees.push({
         id: `EMP-${101 + i}`, name, role, department,
-        email: `${first}@example.com`, phone: `+1 (555) 01${String(i).padStart(2, "0")}-${1000 + i * 37}`,
+        email: `${first}.${last}@pulseoffice.example`,
+        phone: `+91 98100 ${String(10000 + i * 137).padStart(5, "0")}`,
         quota: { holiday: 12, medical: 14, emergency: 7 }
       });
     });
@@ -553,13 +563,25 @@
         reason, contact, status: "Approved", appliedOn, appliedAt: now
       });
     };
+    // Leave is placed on working days (n-th working day from a base) so every seeded
+    // request is valid whatever today's date and however many holidays fall nearby.
+    const wd = (base, n) => {
+      let cur = nextWorkday(base);
+      for (let i = 0; i < Math.abs(n); i++) {
+        cur = addDays(cur, n < 0 ? -1 : 1);
+        while (!isWorkday(cur)) cur = addDays(cur, n < 0 ? -1 : 1);
+      }
+      return cur;
+    };
+    const span = (from, len) => [from, wd(from, len - 1)];
     const pastStart = lastWorkdays[lastWorkdays.length - 1];
-    addLeave("EMP-104", "Medical", anchor, nextWorkday(addDays(anchor, 1)), "Recovering from flu", "", today);
-    addLeave("EMP-106", "Emergency", anchor, anchor, "Family matter", "", today);
-    addLeave("EMP-105", "Holiday", addDays(anchor, 7), addDays(anchor, 11), "Autumn trip", "", addDays(today, -9));
-    addLeave("EMP-103", "Holiday", addDays(anchor, 21), addDays(anchor, 22), "Long weekend", "", addDays(today, -3));
-    addLeave("EMP-101", "Medical", addDays(pastStart, -14), addDays(pastStart, -13), "Dental surgery", "", addDays(pastStart, -16));
-    addLeave("EMP-102", "Holiday", addDays(pastStart, -30), addDays(pastStart, -26), "Design conference", "", addDays(pastStart, -45));
+    addLeave("EMP-104", "Medical", ...span(anchor, 2), "Viral fever, rest advised", "", today);
+    addLeave("EMP-106", "Emergency", ...span(anchor, 1), "Family emergency", "", today);
+    addLeave("EMP-105", "Holiday", ...span(wd(anchor, 5), 5), "Family trip to Goa", "", addDays(today, -9));
+    addLeave("EMP-103", "Holiday", ...span(wd(anchor, 15), 2), "Wedding in the family", "", addDays(today, -3));
+    addLeave("EMP-109", "Holiday", ...span(wd(anchor, 9), 3), "Visiting family", "", addDays(today, -5));
+    addLeave("EMP-101", "Medical", ...span(wd(pastStart, -12), 2), "Dental surgery", "", addDays(pastStart, -16));
+    addLeave("EMP-102", "Holiday", ...span(wd(pastStart, -25), 4), "Design conference", "", addDays(pastStart, -45));
     state.leaves.sort((a, b) => b.start.localeCompare(a.start));
 
     const hash = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
@@ -580,6 +602,25 @@
         state.attendance.push(rec);
       });
     });
+
+    // Today: whoever is not on leave has (deterministically) either arrived already or not yet.
+    // Only punches that are already in the past are created, so the demo is never "from the future".
+    if (isWorkday(today)) {
+      state.employees.forEach(emp => {
+        const h = hash(emp.id + today);
+        if (leaveOn(state, emp.id, today) || h % 5 === 0) return;
+        const inMin = 8 * 60 + 30 + (h % 55);
+        const checkIn = zonedMs(today, Math.floor(inMin / 60), inMin % 60, tz);
+        if (checkIn > now - 5 * 60000) return;
+        const outMin = 17 * 60 + 15 + (h % 60);
+        const checkOut = zonedMs(today, Math.floor(outMin / 60), outMin % 60, tz);
+        state.attendance.push({
+          id: genId("A", now), empId: emp.id, date: today, checkIn,
+          checkOut: checkOut < now ? checkOut : null,
+          mode: h % 4 === 0 ? "Remote" : "Office", breaks: []
+        });
+      });
+    }
     return state;
   }
 

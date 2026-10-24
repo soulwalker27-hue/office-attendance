@@ -10,8 +10,8 @@ const MIN = 60000, HOUR = 3600000, DAY = 86400000;
 function office() {
   const s = C.emptyState();
   s.employees.push(
-    { id: "EMP-101", name: "Ada Lovelace", role: "Engineer", department: "Engineering", email: "ada@example.com", phone: "", quota: { holiday: 12, medical: 14, emergency: 7 } },
-    { id: "EMP-102", name: "Grace Hopper", role: "Admiral", department: "Product", email: "grace@example.com", phone: "", quota: { holiday: 12, medical: 14, emergency: 7 } }
+    { id: "EMP-101", name: "Aarav Sharma", role: "Engineer", department: "Engineering", email: "aarav@example.com", phone: "", quota: { holiday: 12, medical: 14, emergency: 7 } },
+    { id: "EMP-102", name: "Ananya Iyer", role: "Designer", department: "Product", email: "ananya@example.com", phone: "", quota: { holiday: 12, medical: 14, emergency: 7 } }
   );
   return s;
 }
@@ -45,16 +45,19 @@ test("zonedMs round-trips wall-clock time, including across DST", () => {
 test("countWorkdays skips weekends and public holidays", () => {
   assert.equal(C.countWorkdays("2026-10-26", "2026-10-30"), 5);
   assert.equal(C.countWorkdays("2026-10-24", "2026-10-25"), 0);       // Sat–Sun
-  assert.equal(C.countWorkdays("2026-11-09", "2026-11-13"), 4);       // Veterans Day Wed 11 Nov
+  assert.equal(C.countWorkdays("2026-09-28", "2026-10-02"), 4);       // Gandhi Jayanti Fri 2 Oct
   assert.equal(C.countWorkdays("2026-10-30", "2026-10-26"), 0);       // reversed
   assert.equal(C.countWorkdays("garbage", "2026-10-26"), 0);
 });
 
-test("public holiday dates fall on the weekday the calendar claims (no weekend holidays)", () => {
-  for (const h of C.PUBLIC_HOLIDAYS) {
-    const wd = C.weekday(h.date);
-    assert.ok(wd !== 0 && wd !== 6, `${h.name} ${h.date} is on a weekend`);
-  }
+test("holiday calendar is well-formed: valid, unique, sorted dates and known weekdays", () => {
+  const dates = C.PUBLIC_HOLIDAYS.map(h => h.date);
+  assert.equal(new Set(dates).size, dates.length);
+  assert.deepEqual(dates, [...dates].sort());
+  for (const h of C.PUBLIC_HOLIDAYS) assert.ok(C.parseDate(h.date), h.date);
+  assert.equal(C.weekday("2026-01-26"), 1);  // Republic Day 2026 is a Monday
+  assert.equal(C.weekday("2026-10-02"), 5);  // Gandhi Jayanti 2026 is a Friday
+  assert.equal(C.weekday("2026-08-15"), 6);  // Independence Day 2026 is a Saturday
 });
 
 test("check-in → break → check-out records true durations", () => {
@@ -138,8 +141,8 @@ test("weekends and public holidays show as day off", () => {
   const sat = Date.UTC(2026, 9, 24, 6, 0);
   assert.deepEqual(C.statusFor(s, "EMP-101", sat, TZ).code, "DAY_OFF");
   assert.equal(C.statusFor(s, "EMP-101", sat, TZ).note, "Weekend");
-  const veterans = Date.UTC(2026, 10, 11, 6, 0);
-  assert.equal(C.statusFor(s, "EMP-101", veterans, TZ).note, "Veterans Day");
+  const gandhi = Date.UTC(2026, 9, 2, 6, 0);
+  assert.equal(C.statusFor(s, "EMP-101", gandhi, TZ).note, "Gandhi Jayanti");
 });
 
 test("leave: books working days, shows on the board, consumes balance", () => {
@@ -259,10 +262,10 @@ test("escapeHtml and csvField neutralise injection", () => {
 });
 
 test("seed data is valid and consistent for any day of the week", () => {
-  for (let i = 0; i < 14; i++) {
-    const now = Date.UTC(2026, 9, 19 + i, 7, 0);
+  for (let i = 0; i < 700; i++) {
+    const now = Date.UTC(2026, 0, 1 + i, 7, 0);
     const s = C.seedState(now, TZ);
-    assert.equal(s.employees.length, 8);
+    assert.equal(s.employees.length, 10);
     const ids = new Set(s.leaves.map(l => l.id));
     assert.equal(ids.size, s.leaves.length);
     for (const l of s.leaves) {
@@ -278,10 +281,16 @@ test("seed data is valid and consistent for any day of the week", () => {
     }
     const today = C.dateKey(now, TZ);
     for (const r of s.attendance) {
-      assert.ok(r.date < today);
-      assert.ok(r.checkOut > r.checkIn);
+      assert.ok(r.date <= today);
+      assert.ok(r.checkIn < now, "no punches from the future");
       assert.ok(C.isWorkday(r.date));
-      assert.ok(C.workedMinutes(r, now) > 6 * 60);
+      if (r.date < today) {
+        assert.ok(r.checkOut > r.checkIn);
+        assert.ok(C.workedMinutes(r, now) > 6 * 60);
+      } else if (r.checkOut != null) {
+        assert.ok(r.checkOut > r.checkIn && r.checkOut < now);
+      }
+      assert.ok(!C.leaveOn(s, r.empId, r.date), "no punches on seeded leave days");
     }
   }
 });
@@ -294,9 +303,9 @@ test("seed puts leave on the next working day so the board is meaningful", () =>
 });
 
 test("nextHoliday finds the upcoming company holiday", () => {
-  assert.equal(C.nextHoliday("2026-10-24").name, "Veterans Day");
-  assert.equal(C.nextHoliday("2026-11-11").date, "2026-11-11");
-  assert.equal(C.nextHoliday("2026-12-26").date, "2027-01-01");
+  assert.equal(C.nextHoliday("2026-10-24").name, "Diwali");
+  assert.equal(C.nextHoliday("2026-11-08").date, "2026-11-08");
+  assert.equal(C.nextHoliday("2026-12-26").date, "2027-01-26");
 });
 
 test("formatDuration is zero-padded and never negative", () => {
@@ -323,4 +332,43 @@ test("publicView windows old attendance so payloads stay bounded", () => {
   assert.equal(windowed.attendance.length, 46);
   assert.equal(C.publicView(s).attendance.length, 100);
   assert.equal(s.attendance.length, 100);
+});
+
+test("seed shows a lived-in office on a working day (some in, some not yet) but never before anyone could have arrived", () => {
+  const afternoon = Date.UTC(2026, 9, 26, 8, 30); // Mon 14:00 IST
+  const s = C.seedState(afternoon, TZ);
+  const codes = s.employees.map(e => C.statusFor(s, e.id, afternoon, TZ).code);
+  assert.ok(codes.filter(c => c === "CHECKED_IN" || c === "REMOTE").length >= 3, codes.join());
+  const dawn = Date.UTC(2026, 9, 26, 0, 30); // Mon 06:00 IST
+  const early = C.seedState(dawn, TZ);
+  assert.equal(early.attendance.filter(r => r.date === "2026-10-26").length, 0);
+});
+
+test("hostile input cannot reach Object.prototype members or crash validation", () => {
+  const s = office();
+  for (const leaveType of ["constructor", "__proto__", "toString", "hasOwnProperty", 5, null, undefined, {}, []]) {
+    const r = act(s, { type: "leave", empId: "EMP-101", leaveType, start: "2026-11-02", end: "2026-11-02", reason: "abc" });
+    assert.equal(r.ok, false, String(leaveType));
+  }
+  assert.equal(act(s, { type: "leave", empId: "EMP-101", leaveType: "Holiday", start: { a: 1 }, end: [], reason: "abc" }).ok, false);
+  assert.equal(s.leaves.length, 0);
+});
+
+test("abuse caps: punches per day, breaks per session, leaves per employee", () => {
+  const s = office();
+  let t = MON_0930;
+  for (let i = 0; i < 20; i++) {
+    assert.equal(act(s, { type: "checkin", empId: "EMP-101" }, t).ok, true, "check-in " + i);
+    t += MIN;
+    assert.equal(act(s, { type: "checkout", empId: "EMP-101" }, t).ok, true);
+    t += MIN;
+  }
+  assert.equal(act(s, { type: "checkin", empId: "EMP-101" }, t).code, "TOO_MANY");
+
+  const s2 = office();
+  act(s2, { type: "checkin", empId: "EMP-101" });
+  let r;
+  for (let i = 0; i < 101; i++) r = act(s2, { type: "break", empId: "EMP-101" }, MON_0930 + (i + 1) * MIN);
+  assert.equal(s2.attendance[0].breaks.length, 50);
+  assert.equal(r.code, "TOO_MANY"); // the 101st toggle would open break #51
 });
