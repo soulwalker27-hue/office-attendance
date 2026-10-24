@@ -1,81 +1,65 @@
-# PulseAttend — Office Attendance & Leave Management System
+# PulseAttend — Office Attendance & Leave Tracker
 
-![PulseAttend Banner](https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80)
+A shared attendance board for an office. Everyone can see, live:
 
-> A modern, zero-dependency enterprise employee attendance tracking web application built with vanilla web technologies, featuring real-time punch stations, cross-department visibility, leave quota ledgers, and an autonomous QA test harness.
+- who has **checked in / out** and at what time (office or remote), including breaks
+- who is on **medical leave**, **emergency leave** or **holiday**
+- how many leave days each person has taken this year against their quota
+- the company holiday calendar and who is away soon
 
-[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML)
-[![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/CSS)
-[![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
+Zero dependencies: plain HTML/CSS/JS in the browser and a ~150-line Node server (Node 18+).
 
----
+## Run it for the whole office
 
-## 🌟 Key Features
-
-### 1. Daily Time Clock & Punch Station
-- **Check-In & Check-Out**: Real-time timestamps with In-Office (`🏢 Desk Floor 3`) and Remote (`🏡 WFH`) mode toggles.
-- **Live Session Timer**: Real-time counter of hours worked during the active shift.
-- **Break Tracker**: Dedicated pause button for lunch and coffee breaks with automated work duration deduction.
-- **History Ledger**: Rolling 5-day punch log with exact check-in, check-out, and total hours worked.
-
-### 2. Multi-Tier Leave Accounting
-- **Medical Leave (Quota: 14 Days)**: Complete wellness policy tracking with reason logging and physician contact notes.
-- **Emergency Leave (Quota: 7 Days)**: Fast-track logging for urgent domestic or personal emergencies.
-- **Paid Annual Holidays (Quota: 12 Days)**: Planned vacation booking integrated with the company holiday calendar.
-- **Active Leave Protection**: Submitting an approved leave that covers today automatically updates the employee's status and excuses them from active check-in.
-
-### 3. Team Visibility ("Viewed by Others")
-- **"Who's in Today" Live Directory**: Instant visibility into coworkers' statuses (`🟢 In-Office`, `🏡 Remote`, `🩺 Medical Leave`, `🚨 Emergency Leave`, `🏖️ On Holiday`, `🔴 Checked Out`).
-- **Live Search & Multi-Filters**: Filter by department (Engineering, Design, HR, Product, Marketing, Sales & Ops) or status.
-- **Colleague Profile Inspector**: Click any colleague to view their full timesheet, leaves taken breakdown, and contact details.
-- **Switch Role Simulator**: Instantly switch the active viewpoint to experience the system from any coworker's perspective.
-
-### 4. Aesthetics & Theming
-- **Minimalist Light Blue Palette (Default)**: Soft, calming powder-blue backdrop (`#edf4fa`) with crisp elevated cards and high-contrast slate-navy typography.
-- **Obsidian Dark Mode**: Deep slate-navy palette with luminous status pills.
-- **1-Click Theme Switcher**: Persistent toggle saved in `localStorage`.
-
-### 5. Autonomous QA Test Suite
-- Integrated in-browser test harness (`🧪 Test Suite`) running 15 invariant assertions against date math, XSS sanitization, quota limits, and state machines with 100% pass rate.
-
----
-
-## 🚀 Quick Start
-
-PulseAttend is a zero-dependency web application. No Node.js, Python, or build step required.
-
-1. **Clone or Download** the repository:
-   ```bash
-   git clone https://github.com/soulwalker27-hue/pulse-attend.git
-   ```
-2. **Open directly in any modern browser**:
-   - Double-click `index.html` or open it with Google Chrome, Microsoft Edge, Firefox, or Safari.
-
----
-
-## 📁 Repository Structure
-
-```text
-├── index.html                       # Application markup, navigation, and modal dialogues
-├── style.css                        # CSS variable-driven dual design system
-├── app.js                           # State controller, logic, security filters & QA test harness
-├── PROJECT_SPEC_AND_TEST_PLAN.md    # Master architecture & engineering verification audit
-├── README.md                        # Project documentation
-└── .vscode/
-    └── launch.json                  # VS Code launch configuration
+```bash
+npm start                                   # http://127.0.0.1:3000, this machine only
+HOST=0.0.0.0 PORT=3000 npm start            # share on your office network
+OFFICE_TZ=Asia/Kolkata npm start            # timezone that defines "today" (default: server's zone)
 ```
 
----
+Everyone opens the server's address, picks their name in **You are**, and punches in. All
+browsers see the same data (refreshes every 10 s). Data is stored in `data/store.json`
+(override with `DATA_FILE`). First start creates demo employees — add real ones with **Add colleague**.
 
-## 🔒 Security & Data Integrity
+Opening `index.html` directly (or any static host) still works in **local demo mode**: data
+stays in that browser only, and a banner says so.
 
-- **XSS Sanitization**: Dynamic user input is encoded through entity escaping before DOM interpolation.
-- **UTC Date Calculations**: Leave duration arithmetic is computed in UTC to prevent local DST skews.
-- **RFC-4180 CSV Export**: Generates compliant timesheet export files.
+## Rules the app enforces
 
----
+| Area | Rule |
+| --- | --- |
+| Punching | One open session at a time; breaks are timed for real and deducted from worked time; several sessions a day add up. A check-out forgotten on a previous day is shown as "Missed check-out" and never blocks the next day. |
+| Today's status | Derived from punches + leave + calendar, never stored, so it rolls over at midnight in the office timezone. A real check-in beats a scheduled leave (after a confirmation). |
+| Leave days | Working days only — weekends and public holidays are excluded. |
+| Quotas | Holiday 12, Medical 14, Emergency 7 per calendar year. Requests over quota are rejected (not silently approved). Cancelling an unstarted request returns the days. |
+| Dates | Holiday leave must start today or later; medical/emergency may be back-dated 7 days. No overlaps, no requests spanning two years or longer than 90 days. |
+| Privacy | The shared board shows leave **type and dates only**. Reasons and contact notes are never sent to other users — only to their author. |
 
-## 📄 License
+## Tests
 
-This project is licensed under the MIT License.
+```bash
+npm test      # 34 tests: business rules, DST/timezone maths, privacy, HTTP API, security headers
+```
+
+All rules live in `core.js` (pure functions, shared by browser, server and tests).
+
+## Layout
+
+```
+index.html  style.css  app.js   browser UI
+core.js                         business rules (browser + Node)
+server.js                       static files + JSON API + persistence
+test/                           node:test suites
+```
+
+## Known limits (be aware before rollout)
+
+- **No login.** "You are" is a picker, so anyone on the network can act as anyone, and
+  the private-reason endpoint trusts the picked identity. Put it behind your VPN / office
+  network, or add SSO before exposing it more widely. Leave is auto-approved (no manager flow).
+- Single server process with a JSON file — fine for an office, not for thousands of users.
+- Public-holiday list (US, 2026–2027) is in `core.js`; edit it for your country.
+
+## License
+
+MIT — see `LICENSE`.
